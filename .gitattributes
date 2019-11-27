@@ -1,4 +1,8 @@
 * text=auto !eol
+.ci/.travis.post -text
+.ci/.travis.pre -text
+.ci/appveyor.post -text
+.ci/appveyor.pre -text
 .coin-or/projDesc.xml -text
 /.travis.yml -text
 Clp/LICENSE -text
@@ -22,6 +26,9 @@ Clp/MSVisualStudio/v14/libClp/libClp.vcxproj -text
 Clp/MSVisualStudio/v14/libOsiClp/libOsiClp.vcxproj -text
 Clp/MSVisualStudio/v15/libClp/libClp.vcxproj -text
 Clp/MSVisualStudio/v15/libOsiClp/libOsiClp.vcxproj -text
+Clp/MSVisualStudio/v16/libClp/libClp.sln -text
+Clp/MSVisualStudio/v16/libClp/libClp.vcxproj -text
+Clp/MSVisualStudio/v16/libOsiClp/libOsiClp.vcxproj -text
 Clp/MSVisualStudio/v9/Clp.sln -text
 Clp/MSVisualStudio/v9/ClpExamplesMinimum/ClpExamplesMinimum.vcproj -text
 Clp/MSVisualStudio/v9/ClpExamplesTestBarrier/ClpExamplesTestBarrier.vcproj -text
