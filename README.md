@@ -74,12 +74,12 @@ and run
     /path/to/coinbrew build Clp --prefix=/dir/to/install --test
     /path/to/coinbrew install Clp
 
-The `coinbrew` script will fetch [these](Dependencies) additional projects.
+The `coinbrew` script will fetch [these](.coin-or/Dependencies) additional projects.
 
 
 ### Without CoinBrew (Expert users)
 
- 0. Install [these Dependencies](Dependencies)
+ 0. Install [these Dependencies](.coin-or/Dependencies)
  1. Obtain the source code, e.g., from https://github.com/coin-or/Clp
  2. Run `./configure -C` to generate makefiles
  3. Run `make` to build the CoinUtils library
@@ -121,7 +121,7 @@ Help:
  
 Documentation:
  * [Doxygen-generated html documentation](http://www.coin-or.org/Doxygen/Clp)
- * Source code [examples](Clp/examples)
+ * Source code [examples](examples/)
  * [User's Guide](https://coin-or.github.io/Clp) (from 2004)
 
 Interfaces:

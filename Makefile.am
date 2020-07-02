@@ -1,81 +1,39 @@
 # Copyright (C) 2006 International Business Machines and others.
 # All Rights Reserved.
 # This file is distributed under the Eclipse Public License.
-
-## $Id$
-
+#
 # Author:  Andreas Waechter           IBM    2006-04-13
 
-AUTOMAKE_OPTIONS = foreign
-
-EXTRA_DIST = doxydoc/doxygen.conf
+include BuildTools/Makemain.inc
 
 ########################################################################
-#                          Subdirectories                              #
+#            Subdirectories and installation of .pc files              #
 ########################################################################
 
-# subdirs is set by configure as the list of all subdirectories to recurse
-# into
-SUBDIRS = $(subdirs)
+SUBDIRS = src
+
+pkgconfiglib_DATA = clp.pc
+
+# Build OsiClp only if Osi is available.
+if COIN_HAS_OSI
+  SUBDIRS += src/OsiClp
+  pkgconfiglib_DATA += osi-clp.pc
+endif
 
 ########################################################################
 #                           Extra Targets                              #
 ########################################################################
 
 test: all
-	cd Clp; $(MAKE) test
+	cd test; $(MAKE) test
 
 unitTest: test
 
-tests:
-	for dir in $(subdirs); do \
-	  if test -r $$dir/test/Makefile; then \
-	    (cd $$dir; $(MAKE) test) \
-	  fi; \
-	done
+clean-local: clean-doxygen-docs
+	if test -r test/Makefile; then cd test; $(MAKE) clean; fi
 
-unitTests: tests
+install-exec-local: install-doc
 
-# Generate doxygen doc'n in subdirectories (except @PACKAGE_NAME@) if a doxydoc
-# directory is present, then do the base, if present.
+uninstall-local: uninstall-doc uninstall-doxygen-docs
 
-doxydoc:
-	for dir in $(subdirs) ; do \
-	  if test $$dir != @PACKAGE_NAME@ && test -r $$dir/doxydoc ; then \
-	    (cd $$dir ; $(MAKE) doxydoc) \
-	  fi ; \
-	done ; \
-	if test -r doxydoc/doxygen.conf ; then \
-	  doxygen doxydoc/doxygen.conf ; \
-	fi
-
-clean-doxydoc:
-	( cd doxydoc ; rm -rf html *.log *.tag )
-
-# DocInstallDir is defined in Makemain.inc and is specific to the package.
-# For the short term, adopt the notion that we install only the package
-# doxydoc.
-
-install-doxydoc: doxydoc
-	if test -r doxydoc/doxygen.conf ; then \
-	  $(mkdir_p) $(DocInstallDir) ; \
-	  cp -R doxydoc $(DocInstallDir) ; \
-	fi
-
-uninstall-doxydoc:
-	rm -rf $(DocInstallDir)/doxydoc
-
-clean-local: clean-doxydoc
-# install-data-local: install-doxydoc
-uninstall-local: uninstall-doxydoc
-
-.PHONY: test unitTest tests unitTests doxydoc
-
-########################################################################
-#                         Maintainer Stuff                             #
-########################################################################
-
-# Files that are generated and should be cleaned with make distclean
-DISTCLEANFILES = coin_subdirs.txt
-
-include BuildTools/Makemain.inc
+.PHONY: test unitTest
