@@ -6755,7 +6755,7 @@ ClpPackedMatrix3::ClpPackedMatrix3()
 }
 #ifdef _MSC_VER
 #include <intrin.h>
-#elif defined(__arm__)
+#elif defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON)
 #include <arm_neon.h>
 #else
 #include <immintrin.h>
@@ -6901,7 +6901,7 @@ ClpPackedMatrix3::ClpPackedMatrix3(ClpSimplex *model, const CoinPackedMatrix *co
       counts[n]++;
     } else {
       int nOther = n-nOnes;
-      if (nOther<MAX_ONES&nOnes<MAX_ONES) {
+      if (nOther<MAX_ONES&&nOnes<MAX_ONES) {
 	counts[(n-nOnes)*MAX_ONES+nOnes]++;
       } else {
 	nOdd++;
