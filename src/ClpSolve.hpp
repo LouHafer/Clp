@@ -341,18 +341,20 @@ public:
   void startCheck();
   /// Returns cycle length in whileIterating
   int cycle(int in, int out, int wayIn, int wayOut);
+  /// Checks if all going well - may rescale
+  int checkScalingEtc();
 
   /// Returns previous objective (if -1) - current if (0)
   double lastObjective(int back = 1) const;
   /// Set real primal infeasibility and move back
   void setInfeasibility(double value);
-  /// Returns real primal infeasibility (if -1) - current if (0)
+  /// Returns real primal infeasibility (if 1) - current if (0)
   double lastInfeasibility(int back = 1) const;
-  /// Returns number of primal infeasibilities (if -1) - current if (0)
+  /// Returns number of primal infeasibilities (if 1) - current if (0)
   int numberInfeasibilities(int back = 1) const;
   /// Modify objective e.g. if dual infeasible in dual
   void modifyObjective(double value);
-  /// Returns previous iteration number (if -1) - current if (0)
+  /// Returns previous iteration number (if 1) - current if (0)
   int lastIterationNumber(int back = 1) const;
   /// clears all iteration numbers (to switch off panic)
   void clearIterationNumbers();
@@ -458,6 +460,8 @@ public:
   int numberTimesFlagged_;
   /// If things are in an odd state
   int oddState_;
+  /// Check scaling etc after this
+  int checkScalingAfter_;
   //@}
 };
 
