@@ -1127,7 +1127,7 @@ void ClpSimplexPrimal::statusOfProblemInPrimal(int &lastCleaned, int type,
   int loop;
   if (type != 2) {
     loop = progress->looping();
-    if (ifValuesPass)
+    if (ifValuesPass && loop != 3)
       loop = -1;
   } else {
     loop = -1;
@@ -1398,7 +1398,9 @@ void ClpSimplexPrimal::statusOfProblemInPrimal(int &lastCleaned, int type,
       }
     }
   }
-  bool looksOptimal = (!numberDualInfeasibilities_ && !nonLinearCost_->sumInfeasibilities());
+  bool looksOptimal = (!numberDualInfeasibilities_ &&
+		       !nonLinearCost_->sumInfeasibilities() &&
+		       firstFree_ < 0);
   // had ||(type==3&&problemStatus_!=-5) -- ??? why ????
   if ((dualFeasible() || problemStatus_ == -4) && (!ifValuesPass || looksOptimal || firstFree_ < 0)) {
     // see if extra helps
@@ -3755,6 +3757,7 @@ int ClpSimplexPrimal::pivotResult(int ifValuesPass)
     // refactorize here
     int lastCleaned = 0;
     ClpSimplexProgress dummyProgress;
+    dummyProgress.fillFromModel(this);
     if (saveStatus_)
       statusOfProblemInPrimal(lastCleaned, 1, &dummyProgress, true, ifValuesPass);
     else

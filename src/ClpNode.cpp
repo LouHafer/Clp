@@ -163,8 +163,8 @@ void ClpNode::gutsOfConstructor(ClpSimplex *model, const ClpNodeStuff *stuff,
         CoinMemcpyN(model->dualRowSolution(), numberRows, dualSolution_ + numberColumns);
       }
       pivotVariables_ = new int[maximumRows_];
-      if (model->pivotVariable() && model->numberRows() == numberRows)
-        CoinMemcpyN(model->pivotVariable(), numberRows, pivotVariables_);
+      if (model->pivotVariable() && model->numberRows() == numberRows) 
+	CoinMemcpyN(model->pivotVariable(), numberRows, pivotVariables_);
       else
         CoinFillN(pivotVariables_, numberRows, -1);
     }
@@ -185,7 +185,8 @@ void ClpNode::gutsOfConstructor(ClpSimplex *model, const ClpNodeStuff *stuff,
   sumInfeasibilities_ = 0.0;
   numberInfeasibilities_ = 0;
   int nFix = 0;
-  double gap = CoinMax(model->dualObjectiveLimit() - objectiveValue_, 1.0e-4);
+  // needs to be large (problem is perturbed)
+  double gap = CoinMax(model->dualObjectiveLimit() - objectiveValue_, 1.0e-1);
 #define PSEUDO 3
 #if PSEUDO == 1 || PSEUDO == 2
   // Column copy of matrix
@@ -415,7 +416,7 @@ void ClpNode::gutsOfConstructor(ClpSimplex *model, const ClpNodeStuff *stuff,
         if (fix) {
           nFix++;
           //printf("fixed %d to zero gap %g dj %g %g\n",iColumn,
-          // gap,dualSolution_[iColumn], columnScale ? columnScale[iColumn]:1.0);
+	  //	 gap,dualSolution_[iColumn], columnScale ? columnScale[iColumn]:1.0);
           model->setColumnStatus(iColumn, ClpSimplex::isFixed);
         }
       } else if (model->getColumnStatus(iColumn) == ClpSimplex::atUpperBound) {
@@ -430,15 +431,13 @@ void ClpNode::gutsOfConstructor(ClpSimplex *model, const ClpNodeStuff *stuff,
         if (fix) {
           nFix++;
           //printf("fixed %d to one gap %g dj %g %g\n",iColumn,
-          // gap,dualSolution_[iColumn], columnScale ? columnScale[iColumn]:1.0);
+	  //	 gap,dualSolution_[iColumn], columnScale ? columnScale[iColumn]:1.0);
           model->setColumnStatus(iColumn, ClpSimplex::isFixed);
         }
       }
       iInteger++;
     }
   }
-  //printf("Choosing %d inf %g pri %d\n",
-  // sequence_,mostAway,bestPriority);
 #if PSEUDO == 2
   delete[] activeWeight;
 #endif
@@ -517,7 +516,7 @@ ClpNode &
 ClpNode::operator=(const ClpNode &rhs)
 {
   if (this != &rhs) {
-    printf("ClpNode = not implemented\n");
+    printf("CLPNODE = NOT implemented\n");
     abort();
   }
   return *this;
@@ -565,9 +564,11 @@ void ClpNode::applyNode(ClpSimplex *model, int doBoundsEtc)
     if (!way) {
       // This should also do underlying internal bound
       model->setColumnUpper(sequence_, floor(branchingValue_));
+      //printf("branching down on %d from %g to %g\n",sequence_,branchingValue_,floor(branchingValue_));
     } else {
       // This should also do underlying internal bound
       model->setColumnLower(sequence_, ceil(branchingValue_));
+      //printf("branching up on %d from %g to %g\n",sequence_,branchingValue_,ceil(branchingValue_));
     }
     // apply dj fixings
     for (int i = 0; i < numberFixed_; i++) {
@@ -575,8 +576,10 @@ void ClpNode::applyNode(ClpSimplex *model, int doBoundsEtc)
       if ((iColumn & 0x10000000) != 0) {
         iColumn &= 0xfffffff;
         model->setColumnLower(iColumn, upper[iColumn]);
+	//printf("also fixing %d up to %g\n",iColumn,upper[iColumn]);
       } else {
         model->setColumnUpper(iColumn, lower[iColumn]);
+	//printf("also fixing %d down to %g\n",iColumn,lower[iColumn]);
       }
     }
   } else {
@@ -778,7 +781,7 @@ ClpNodeStuff::operator=(const ClpNodeStuff &rhs)
     maximumNodes_ = rhs.maximumNodes_;
     numberBeforeTrust_ = rhs.numberBeforeTrust_;
     stateOfSearch_ = rhs.stateOfSearch_;
-    int n = maximumNodes();
+    int n = maximumSpace();
     if (n) {
       for (int i = 0; i < n; i++)
         delete nodeInfo_[i];
@@ -842,7 +845,7 @@ ClpNodeStuff::~ClpNodeStuff()
   delete[] numberUp_;
   delete[] numberDownInfeasible_;
   delete[] numberUpInfeasible_;
-  int n = maximumNodes();
+  int n = maximumSpace();
   if (n) {
     for (int i = 0; i < n; i++)
       delete nodeInfo_[i];

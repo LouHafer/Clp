@@ -7,7 +7,6 @@
 #include "CoinPragma.hpp"
 #include "ClpConfig.h"
 
-// check already here if CLP_HAS_GLPK is defined, since we do not want to get confused by a CLP_HAS_GLPK in config_coinutils.h
 #if defined(CLP_HAS_AMD) || defined(CLP_HAS_CHOLMOD) || defined(CLP_HAS_GLPK)
 #define UFL_BARRIER
 #endif
@@ -64,7 +63,7 @@ int debugInt[24];
 #include "ClpCholeskyWssmp.hpp"
 #include "ClpCholeskyWssmpKKT.hpp"
 #endif
-#ifdef UFL_BARRIER
+#if defined(UFL_BARRIER) && (defined(CLP_HAS_AMD) || defined(CLP_HAS_CHOLMOD))
 #include "ClpCholeskyUfl.hpp"
 #endif
 #ifdef TAUCS_BARRIER
@@ -2670,6 +2669,11 @@ int ClpSimplex::initialSolve(ClpSolve &options)
       model2->addColumns(numberArtificials, NULL, NULL, addCost,
         addStarts, addRow, addElement);
     }
+    // redo
+    element = model2->matrix()->getElements();
+    row = model2->matrix()->getIndices();
+    columnStart = model2->matrix()->getVectorStarts();
+    columnLength = model2->matrix()->getVectorLengths();
     delete[] addStarts;
     delete[] addRow;
     delete[] addElement;
@@ -3064,7 +3068,7 @@ int ClpSimplex::initialSolve(ClpSolve &options)
         // try singletons
         char *markX = new char[numberColumns];
         memset(markX, 0, numberColumns);
-        for (int i = 0; i < numberSort; i++)
+        for (int i = 0; i < numberSort; i++) 
           markX[sort[i]] = 1;
         int n = numberSort;
         for (int i = 0; i < numberColumns; i++) {
@@ -3225,7 +3229,7 @@ int ClpSimplex::initialSolve(ClpSolve &options)
       }
       break;
 #endif
-#ifdef UFL_BARRIER
+#if defined(UFL_BARRIER) && (defined(CLP_HAS_AMD) || defined(CLP_HAS_CHOLMOD))
     case 4:
       if (!doKKT) {
         ClpCholeskyUfl *cholesky = new ClpCholeskyUfl(options.getExtraInfo(1));
@@ -3839,15 +3843,41 @@ int ClpSimplex::initialSolve(ClpSolve &options)
             if (getColumnStatus(i) == superBasic)
               numberSuperBasic++;
           }
+	  // double check if looks odd
           if (sumDual > 1000.0 * sumPrimal || numberSuperBasic) {
             primal(1);
+	    if (!finalStatus&&problemStatus_) {
+	      handler_->message(CLP_GENERAL, messages_)
+		<< "Primal after postsolve not optimal! - trying dual"
+		<< CoinMessageEol;
+	      dual();
+	    }
           } else if (sumPrimal > 1000.0 * sumDual) {
             dual();
+	    if (!finalStatus&&problemStatus_) {
+	      handler_->message(CLP_GENERAL, messages_)
+		<< "Dual after postsolve not optimal! - trying primal"
+		<< CoinMessageEol;
+	      primal(1);
+	    }
           } else {
-            if (method != ClpSolve::useDual)
+            if (method != ClpSolve::useDual) {
               primal(1);
-            else
+	      if (!finalStatus&&problemStatus_) {
+		handler_->message(CLP_GENERAL, messages_)
+		  << "Primal after postsolve not optimal! - trying dual"
+		  << CoinMessageEol;
+		dual();
+	      }
+            } else {
               dual();
+	      if (!finalStatus&&problemStatus_) {
+		handler_->message(CLP_GENERAL, messages_)
+		  << "Dual after postsolve not optimal! - trying primal"
+		  << CoinMessageEol;
+		primal(1);
+	      }
+	    }
           }
 #else
           dealWithAbc(1, 2, interrupt);
@@ -3906,6 +3936,28 @@ int ClpSimplex::initialSolve(ClpSolve &options)
   handler_->printing(timeIdiot != 0.0)
     << timeIdiot;
   handler_->message() << CoinMessageEol;
+  if (finalStatus==0) {
+    if (secondaryStatus_>1 && secondaryStatus_<5) {
+      std::string scaledMessage[] = {
+	    "Unscaled problem has primal infeasibilities", 
+	    "Unscaled problem has dual infeasibilities", 
+	    "Unscaled problem has primal and dual infeasibilities"};
+      handler_->message(CLP_GENERAL,messages_)
+	<< scaledMessage[secondaryStatus_-2];
+      handler_->message() << CoinMessageEol;
+      if ((moreSpecialOptions_&134217728)!=0) {
+	// solve without scaling
+	scalingFlag_ = 0;
+	delete[] rowScale_;
+	delete[] columnScale_;
+	rowScale_ = NULL;
+	columnScale_ = NULL;
+	inverseRowScale_ = NULL;
+	inverseColumnScale_ = NULL;
+	primal(1);
+      }
+    }
+  }
   if (interrupt)
     signal(SIGINT, saveSignal);
   perturbation_ = savePerturbation;
@@ -4491,6 +4543,14 @@ ClpSimplexProgress::checkScalingEtc()
     return 0;
   if (model_->numberIterations()) {
     checkScalingAfter_ = model_->checkScaling();
+    if (checkScalingAfter_!=COIN_INT_MAX) { 
+      for (int i = 0; i < CLP_PROGRESS; i++) {
+	if (model_->algorithm() >= 0)
+	  objective_[i] = COIN_DBL_MAX * 1.0e-50;
+	else
+	  objective_[i] = -COIN_DBL_MAX * 1.0e-50;
+      }
+    }
     return 1;
   } else {
     return 0;

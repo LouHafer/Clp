@@ -1363,6 +1363,9 @@ void ClpModel::resize(int newNumberRows, int newNumberColumns)
       which[i - newNumberColumns] = i;
     matrix_->deleteCols(numberColumns_ - newNumberColumns, which);
     delete[] which;
+  } else if (!matrix_) {
+    CoinPackedMatrix matrix;
+    matrix_ = new ClpPackedMatrix(matrix);
   }
   if (integerType_ && numberColumns2 > maximumColumns_) {
     char *temp = new char[newNumberColumns];
@@ -1819,7 +1822,8 @@ void ClpModel::addRows(int number, const double *rowLower,
       matrix_->appendMatrix(number, 0, rowStarts, columns, elements);
     }
   }
-  synchronizeMatrix();
+  if (rowStarts)
+    synchronizeMatrix();
 }
 // Add rows
 void ClpModel::addRows(int number, const double *rowLower,
@@ -1899,14 +1903,15 @@ void ClpModel::addRows(int number, const double *rowLower,
   scaledMatrix_ = NULL;
   if (!matrix_)
     createEmptyMatrix();
-  if (rows)
+  if (rows) {
     matrix_->appendRows(number, rows);
+    synchronizeMatrix();
+  }
   setRowScale(NULL);
   setColumnScale(NULL);
   if (lengthNames_) {
     rowNames_.resize(numberRows_);
   }
-  synchronizeMatrix();
 }
 #endif
 #ifndef SLIM_CLP
@@ -1965,7 +1970,8 @@ int ClpModel::addRows(const CoinBuild &buildObject, bool tryPlusMinusOne, bool c
         starts[iRow + 1] = numberElements;
       }
       // make sure matrix has enough columns
-      matrix_->setDimensions(-1, numberColumns_);
+      if (matrix_)
+	matrix_->setDimensions(-1, numberColumns_);
       addRows(number, lower, upper, starts,column,element);
       delete[] starts;
       delete[] column;
@@ -2389,14 +2395,15 @@ void ClpModel::addColumns(int number, const double *columnLower,
   scaledMatrix_ = NULL;
   if (!matrix_)
     createEmptyMatrix();
-  if (columns)
+  if (columns) {
     matrix_->appendCols(number, columns);
+    synchronizeMatrix();
+  }
   setRowScale(NULL);
   setColumnScale(NULL);
   if (lengthNames_) {
     columnNames_.resize(numberColumns_);
   }
-  synchronizeMatrix();
 }
 #endif
 #ifndef SLIM_CLP
@@ -2960,9 +2967,11 @@ int ClpModel::readMps(const char *fileName,
 
   return status;
 }
+#if defined(COINUTILS_HAS_GLPK) && defined(CLP_HAS_GLPK)
 // Read GMPL files from the given filenames
 int ClpModel::readGMPL(const char *fileName, const char *dataName,
-  bool keepNames)
+		       bool keepNames,
+		       glp_tran **coin_glp_tran, glp_prob **coin_glp_prob)
 {
   FILE *fp = fopen(fileName, "r");
   if (fp) {
@@ -2989,7 +2998,7 @@ int ClpModel::readGMPL(const char *fileName, const char *dataName,
   bool savePrefix = m.messageHandler()->prefix();
   m.messageHandler()->setPrefix(handler_->prefix());
   double time1 = CoinCpuTime(), time2;
-  int status = m.readGMPL(fileName, dataName, keepNames);
+  int status = m.readGMPL(fileName, dataName, keepNames, coin_glp_tran, coin_glp_prob);
   m.messageHandler()->setPrefix(savePrefix);
   if (!status) {
     loadProblem(*m.getMatrixByCol(),
@@ -3042,6 +3051,7 @@ int ClpModel::readGMPL(const char *fileName, const char *dataName,
   }
   return status;
 }
+#endif
 #endif
 bool ClpModel::isPrimalObjectiveLimitReached() const
 {
@@ -3748,7 +3758,8 @@ int ClpModel::emptyProblem(int *infeasNumber, double *infeasSum, bool printMessa
     delete[] ray_;
     ray_ = new double[numberColumns_];
     CoinZeroN(ray_, numberColumns_);
-    ray_[badColumn] = badValue;
+    if (badColumn>=0) // might be empty problem!
+      ray_[badColumn] = badValue;
   }
   return returnCode;
 }

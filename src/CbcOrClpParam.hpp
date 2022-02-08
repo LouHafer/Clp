@@ -1,4 +1,3 @@
-
 // Copyright (C) 2002, International Business Machines
 // Corporation and others.  All Rights Reserved.
 // This code is licensed under the terms of the Eclipse Public License (EPL).
@@ -466,10 +465,14 @@ public:
   }
   /// Sets string value
   void setStringValue(std::string value);
+  void appendStringValue(std::string value);
   inline std::string stringValue() const
   {
     return stringValue_;
   }
+  /// Decodes options
+  int optionIntField(std::string field, int *valid);
+
   /// Returns 1 if matches minimum, 2 if matches less, 0 if not matched
   int matches(std::string input) const;
   /// type
@@ -554,7 +557,7 @@ private:
   int intValue_;
   /// Double parameter - current value
   double doubleValue_;
-  /// String parameter - current value
+  /// String parameter - current value (or int keywords)
   std::string stringValue_;
   /** 7 if used everywhere,
          1 - used by clp
@@ -611,8 +614,7 @@ CBCORCLPPARAM_EXPORT
 void saveSolution(const ClpSimplex *lpSolver, std::string fileName);
 CBCORCLPPARAM_EXPORT
 void restoreSolution(ClpSimplex *lpSolver, std::string fileName, int mode);
+/// Returns last field for error handling
+std::string getCoinErrorField();
 
 #endif /* CbcOrClpParam_H */
-
-/* vi: softtabstop=2 shiftwidth=2 expandtab tabstop=2
-*/

@@ -60,6 +60,7 @@ AC_COIN_CHK_PKG(Osi,[OsiClpLib OsiClpUnitTest])
 AC_COIN_CHK_PKG(OsiTests,[OsiClpUnitTest],[osi-unittests])
 AC_COIN_CHK_PKG(Sample,,[coindatasample],[],dataonly)
 AC_COIN_CHK_PKG(Netlib,,[coindatanetlib],[],dataonly)
+AC_COIN_CHK_PKG(Glpk,[ClpLib],[coinglpk])
 
 #############################################################################
 #                                    Aboca                                  #
@@ -76,13 +77,17 @@ AC_CLP_ABOCA(1)
 # version distributed with Fedora.
 
 # amd.h
-AC_COIN_CHK_LIB(AMD,[ClpLib],[-lamd],[-I/usr/include/suitesparse],[],
-                [amd_defaults])
+AC_COIN_CHK_LIBHDR(AMD,[ClpLib],[-lamd],[-I/usr/include/suitesparse],[],
+  [[double Control[AMD_CONTROL];
+   amd_defaults(Control);]],
+  [#include "amd.h"])
 
 # CHOLMOD from UFL
 # Requires AMD, but apparently not for a link check with dynamic libraries.
 # cholmod.h
-AC_COIN_CHK_LIB(CHOLMOD,[ClpLib],[-lcholmod],[-I/usr/include/suitesparse],[],[cholmod_start])
+AC_COIN_CHK_LIBHDR(CHOLMOD,[ClpLib],[-lcholmod],[-I/usr/include/suitesparse],[],
+  [cholmod_start((cholmod_common*)0);],
+  [#include "cholmod.h"])
 
 # MUMPS. Check first for ThirdParty/MUMPS, on the assumption that if the user
 # bothered to build it, we should use it. If it's not present, try for a
@@ -90,12 +95,14 @@ AC_COIN_CHK_LIB(CHOLMOD,[ClpLib],[-lcholmod],[-I/usr/include/suitesparse],[],[ch
 # using clp.
 AC_COIN_CHK_PKG(MUMPS,[ClpLib],[coinmumps])
 if test $coin_has_mumps = no ; then
-  AC_COIN_CHK_LIB(MUMPS,[ClpLib],[-ldmumps],[-I/usr/include/MUMPS],[],[dmumps_c])
+  AC_COIN_CHK_LIBHDR(MUMPS,[ClpLib],[-ldmumps],[-I/usr/include/MUMPS],[],
+    [dmumps_c((DMUMPS_STRUC_C*)0)],
+    [#include "dmumps_c.h"])
 fi
 
 # WSMP (Watson Sparse Matrix Package from IBM T.J. Watson)
 AC_ARG_WITH([wsmp],
-            AC_HELP_STRING([--with-wsmp],[specify WSMP library]),
+            AS_HELP_STRING([--with-wsmp],[specify WSMP library]),
             [have_wsmp=yes; wsmp_lflags=$withval],
             [have_wsmp=no])
 
@@ -155,10 +162,10 @@ fi
 AC_CONFIG_FILES([doxydoc/doxygen.conf])
 
 # Here put the location and name of the configuration header file
-AC_CONFIG_HEADER([src/config.h src/config_clp.h])
+AC_CONFIG_HEADERS([src/config.h src/config_clp.h])
 
 if test $coin_has_osi = yes ; then
-  AC_CONFIG_HEADER([src/OsiClp/config_osiclp.h])
+  AC_CONFIG_HEADERS([src/OsiClp/config_osiclp.h])
 fi
 
 # Finally, we let configure write all the output...

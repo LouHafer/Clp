@@ -323,6 +323,12 @@ public:
   virtual void solveFromHotStart();
   /// Delete the snapshot
   virtual void unmarkHotStart();
+  /** Do series of solves from hot start
+      - with options - initially 1 - just go to first re-factorization.
+      Returns number that can be fixed (negative if whole problem infeasible)
+  */
+  virtual int solvesFromHotStart(int numberLook, const int *which,
+				 int options);
   /** Start faster dual - returns negative if problems 1 if infeasible,
       Options to pass to solver
       1 - create external reduced costs for columns
@@ -1004,6 +1010,8 @@ public:
   virtual int writeBasisNative(const char *filename) const;
   /// Read file in LP format (with names)
   virtual int readLp(const char *filename, const double epsilon = 1e-5);
+  /// Read file in LP format (with names) for opened file
+  virtual int readLp(FILE *fp, const double epsilon = 1e-5);
   /** Write the problem into an Lp file of the given filename.
       If objSense is non zero then -1.0 forces the code to write a
       maximization objective and +1.0 to write a minimization one.
@@ -1251,13 +1259,10 @@ protected:
 
   /** Apply a column cut (adjust one or more bounds). */
   virtual void applyColCut(const OsiColCut &cc);
-  //@}
-
-  //---------------------------------------------------------------------------
-
-protected:
-  /**@name Protected methods */
-  //@{
+  
+  /** Read file in LP format (with names), helper for public functions */
+  int readLp(class CoinLpIO &m);
+  
   /// The real work of a copy constructor (used by copy and assignment)
   void gutsOfDestructor();
 

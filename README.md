@@ -6,7 +6,8 @@
 
 _This file is auto-generated from [config.yml](.coin-or/config.yml) using the 
 [generate_readme](.coin-or/generate_readme) script.
-To make changes, please edit [config.yml](.coin-or/config.yml) or the generation script._
+To make changes, please edit [config.yml](.coin-or/config.yml) or the generation scripts
+[here](.coin-or/generate_readme) and [here](https://github.com/coin-or/coinbrew/blob/master/scripts/generate_readme)._
 
 Clp (*C*oin-or *l*inear *p*rogramming) is an open-source linear programming solver.
 It is primarily meant to be used as a callable library, but a basic, stand-alone executable version is also available.
@@ -29,49 +30,67 @@ Clp is written in C++ and is released as open source under the [Eclipse Public L
 
 It is distributed under the auspices of the [COIN-OR Foundation](https://www.coin-or.org)
 
-The Clp website is https://github.com/coin-or/Clp.
+The Clp development site is https://github.com/coin-or/Clp.
 
 ## CITE
 
-[![DOI](https://zenodo.org/badge/173496299.svg)](https://zenodo.org/badge/latestdoi/173496299)
+Code: [![DOI](https://zenodo.org/badge/173496299.svg)](https://zenodo.org/badge/latestdoi/173496299)
+
 
 ## CURRENT BUILD STATUS
 
-[![Build Status](https://travis-ci.com/coin-or/Clp.svg?branch=master)](https://travis-ci.com/coin-or/Clp)
+[![Windows Builds](https://github.com/coin-or/Clp/actions/workflows/windows-ci.yml/badge.svg?branch=master)](https://github.com/coin-or/Clp/actions/workflows/windows-ci.yml?query=branch%3Amaster)
 
-[![Build status](https://ci.appveyor.com/api/projects/status/h3daf7woiig6n176/branch/master?svg=true)](https://ci.appveyor.com/project/coin-or/Clp/branch/master)
+[![Linux and MacOS Builds](https://github.com/coin-or/Clp/actions/workflows/linux-ci.yml/badge.svg?branch=master)](https://github.com/coin-or/Clp/actions/workflows/linux-ci.yml?query=branch%3Amaster)
 
 ## DOWNLOAD
+
+What follows is a quick start guide for obtaining or building
+Clp on common platforms. More detailed information is
+available [here](https://coin-or.github.io/user_introduction.html).
 
 ### Docker image
 
 There is a Docker image that provides Clp, as well as other projects
 in the [COIN-OR Optimization
-Suite](https://github.com/coin-or/COIN-OR-OptimizationSuite)[here](https://hub.docker.com/repository/docker/coinor/coin-or-optimization-suite)
+Suite](https://github.com/coin-or/COIN-OR-OptimizationSuite) [here](https://hub.docker.com/repository/docker/coinor/coin-or-optimization-suite)
 
 ### Binaries
 
-Binaries for most platforms are available as part of [Clp](https://bintray.com/coin-or/download/Clp). 
+For newer releases, binaries will be made available as assets attached to
+releases in Github
+[here](https://github.com/coin-or/Clp/releases). Older binaries
+are archived as part of Clp
+[here](https://www.coin-or.org/download/binary/Clp).
 
  * *Linux*: On Debian/Ubuntu, Clp is available in the package `coinor-clp` and can be installed with apt. On Fedora, Clp is available in the package `coin-or-Clp`.
- * *Windows*: The easiest way to get Clp on Windows is to download from *[Bintray](https://bintray.com/coin-or/download/Clp)*.
- * *Mac OS X*: The easiest way to get Cbc on Mac OS X is through [Homebrew](https://brew.sh).
+ * *Windows*: The easiest way to get Clp on Windows is to download an archive as described above.
+ * *Mac OS X*: The easiest way to get Clp on Mac OS X is through [Homebrew](https://brew.sh).
    * `brew tap coin-or-tools/coinor`
    * `brew install coin-or-tools/coinor/clp`
 
 Due to license incompatibilities, pre-compiled binaries lack some functionality.
 If binaries are not available for your platform for the latest version and you would like to request them to be built and posted, feel free to let us know on the mailing list.
 
-*Source code* can be obtained either by
+### Source
+
+Source code can be obtained either by
 
  * Downloading a snapshot of the source code for the latest release version of Clp from the
  [releases](https://github.com/coin-or/Clp/releases) page.
  * Cloning this repository from [Github](https://github.com/coin-or/Clp) or 
  * Using the [coinbrew](https://github.com/coin-or/coinbrew) script to get the project and all dependencies (recommended, see below).   
 
-Below is a quick start guide for building on common platforms. More detailed
-build instructions are
-[here](https://coin-or.github.io/user_introduction.html).
+### Dependencies
+
+Clp has a number of dependencies, which are detailed in
+[config.yml](.coin-or/config.yml). Dependencies on other COIN-OR projects are
+automatically downloaded when obtaining the source with `coinbrew`. For some
+of the remaining third-party dependencies, automatic download scripts and
+build wrappers are provided (and will also be automatically run for required
+and recommended dependencies), while other libraries that are aeasy to obtain
+must be installed using an appropriate package manager (or may come with your
+OS by default). 
 
 ## BUILDING from source
 
@@ -79,7 +98,8 @@ The quick start assumes you are in a bash shell.
 
 ### Using `coinbrew`
 
-To build CoinUtils from source, obtain the `coinbrew` script, do
+To download and build Clp from source, execute the 
+following on the command line. 
 ```
 wget https://raw.githubusercontent.com/coin-or/coinbrew/master/coinbrew
 chmod u+x coinbrew
@@ -179,11 +199,12 @@ documentation [here](http://coin-or.github.io/Clp/Doxygen).
 ## Project Links
 
 Help:
+ * [Code of Conduct](https://www.coin-or.org/code-of-conduct/)
  * [Discussion forum](https://github.com/coin-or/Clp/discussions)
  * [Report a bug](https://github.com/coin-or/Clp/issues/new)
  
 Documentation:
- * [Doxygen-generated html documentation](http://www.coin-or.org/Doxygen/Clp)
+ * [Doxygen-generated html documentation](https://coin-or.github.io/Clp/Doxygen)
  * Source code [examples](examples/)
  * [User's Guide](https://coin-or.github.io/Clp) (from 2004)
 

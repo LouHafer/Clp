@@ -268,9 +268,12 @@ public:
   int readMps(const char *filename,
     bool keepNames = false,
     bool ignoreErrors = false);
+#if defined(COINUTILS_HAS_GLPK) && defined(CLP_HAS_GLPK)
   /// Read GMPL files from the given filenames
   int readGMPL(const char *filename, const char *dataName,
-	       bool keepNames = false);
+	       bool keepNames = false,
+	       glp_tran **coin_glp_tran = NULL, glp_prob **coin_glp_prob = NULL);
+#endif
   /// Read file in LP format from file with name filename.
   /// See class CoinLpIO for description of this format.
   int readLp(const char *filename, const double epsilon = 1e-5);
@@ -1096,6 +1099,8 @@ public:
   }
   /// value of incoming variable (in Dual)
   double valueIncomingDual() const;
+  /// Clean stuff
+  void cleanSolver();
   //@}
 
 #ifndef CLP_USER_DRIVEN
@@ -1430,7 +1435,9 @@ public:
 	 16777216 bit - if factorization kept can still declare optimal at once
 	 33554432 bit - if singular at dual startup - go to primal
 	 67108864 bit - try sorted values pass
-     */
+	 134217728 bit - clean up problem if scaling feasible mismatch
+	 268435456 bit - objective is piecewise linear
+  */
   inline int moreSpecialOptions() const
   {
     return moreSpecialOptions_;
@@ -1467,6 +1474,8 @@ public:
 	 16777216 bit - if factorization kept can still declare optimal at once
 	 33554432 bit - if singular at dual startup - go to primal
 	 67108864 bit - try sorted values pass
+	 134217728 bit - clean up problem if scaling feasible mismatch
+	 268435456 bit - objective is piecewise linear
      */
   inline void setMoreSpecialOptions(int value)
   {
@@ -1979,6 +1988,8 @@ public:
   mutable int spareIntArray_[4];
   /// Spare double array for passing information [0]!=0 switches on
   mutable double spareDoubleArray_[4];
+  /// Deletes rows (just ClpMode::deleteRows plus a bit)
+  void deleteRows(int number, const int *which);
 
 protected:
   /// Allow OsiClp certain perks
