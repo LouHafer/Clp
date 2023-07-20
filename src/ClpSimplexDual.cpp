@@ -361,7 +361,13 @@ int ClpSimplexDual::startupSolve(int ifValuesPass, double *saveDuals, int startF
 
           printf("returning at %d\n", __LINE__);
 #endif
-          return 1; // to primal
+ 	  if ((specialOptions_&1048576)==0) {
+	    return 1; // to primal
+	  } else {
+	    // treat as stopped
+	    problemStatus_=3;
+	    return 0;
+	  }
         }
       }
     } else if (!ifValuesPass) {
@@ -1981,7 +1987,8 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
               int numberFake = numberAtFakeBound();
               double sumPrimal = (!numberFake) ? 2.0e5 : sumPrimalInfeasibilities_;
               if (sumPrimalInfeasibilities_ < 1.0e-3 || sumDualInfeasibilities_ > 1.0e-5 || (sumPrimal < 1.0e5 && (specialOptions_ & 1024) != 0 && factorization_->pivots())) {
-                if (sumPrimal > 50.0 && factorization_->pivots() > 2) {
+                if ((sumPrimal > 50.0 && factorization_->pivots() > 2)
+		    || (moreSpecialOptions_&256)!=0 && factorization_->pivots()) {
                   problemStatus_ = -4;
 #ifdef COIN_DEVELOP
                   printf("status to -4 at %d - primalinf %g pivots %d\n",
@@ -2017,7 +2024,7 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
                   numberDualInfeasibilities_, sumDualInfeasibilities_,
                   numberFake_, dualBound_, factorization_->pivots());
 #endif
-                if ((specialOptions_ & 1024) != 0 && factorization_->pivots()) {
+                if ((specialOptions_ & 1024) != 0 && !factorization_->pivots()) {
                   problemStatus_ = 10;
 #if COIN_DEVELOP > 1
                   printf("returning at %d\n", __LINE__);
@@ -5385,7 +5392,8 @@ void ClpSimplexDual::statusOfProblemInDual(int &lastCleaned, int type,
       numberPrimalInfeasibilities_ = 0;
       sumPrimalInfeasibilities_ = 0.0;
     } else {
-      problemStatus_ = 10; // instead - try other algorithm
+      if (problemStatus_!=3)
+	problemStatus_ = 10; // instead - try other algorithm
 #if COIN_DEVELOP > 2
       printf("returning at %d\n", __LINE__);
 #endif
@@ -7279,8 +7287,8 @@ int ClpSimplexDual::fastDual(bool alwaysFinish)
       double *givenPi = NULL;
       returnCode = whileIterating(givenPi, 0);
       if ((!alwaysFinish && returnCode < 0) || returnCode == 3) {
-        if (returnCode != 3)
-          assert(problemStatus_ < 0);
+        //if (returnCode != 3)
+	//assert(problemStatus_ < 0);
         returnCode = 1;
         problemStatus_ = 3;
         // can't say anything interesting - might as well return

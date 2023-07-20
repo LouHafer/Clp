@@ -397,7 +397,7 @@ void Idiot::solve2(CoinMessageHandler *handler, const CoinMessages *messages)
   int i, n;
   int allOnes = 1;
   int iteration = 0;
-  int iterationTotal = 0;
+  //int iterationTotal = 0;
   int nTry = 0; /* number of tries at same weight */
   double fixTolerance = IDIOT_FIX_TOLERANCE;
   int maxBigIts = maxBigIts_;
@@ -847,7 +847,7 @@ void Idiot::solve2(CoinMessageHandler *handler, const CoinMessages *messages)
   }
   int numberBaseTrys = 0; // for first time
   int numberAway = -1;
-  iterationTotal = lastResult.iteration;
+  //iterationTotal = lastResult.iteration;
   firstInfeas = lastResult.infeas;
   if ((strategy_ & 1024) != 0)
     reasonableInfeas = 0.5 * firstInfeas;
@@ -974,7 +974,7 @@ void Idiot::solve2(CoinMessageHandler *handler, const CoinMessages *messages)
     numberAway = n;
     keepinfeas = result.infeas;
     lastWeighted = result.weighted;
-    iterationTotal += result.iteration;
+    //iterationTotal += result.iteration;
     if (iteration == 1) {
       if ((strategy_ & 1024) != 0 && mu < 1.0e-10)
         result.infeas = firstInfeas * 0.8;
@@ -1338,9 +1338,14 @@ void Idiot::crossOver(int mode)
   if (djTolerance > 0.0 && djTolerance < 1.0)
     djTolerance = 1.0;
   int iteration;
-  int i, n = 0;
+  int i;
+#ifdef COIN_DEVELOP
+  int n = 0;
+#endif
   double ratio = 1.0;
+#ifdef COIN_DETAIL
   double objValue = 0.0;
+#endif
   if ((strategy_ & 128) != 0) {
     fixTolerance = SMALL_IDIOT_FIX_TOLERANCE;
   }
@@ -1405,12 +1410,16 @@ void Idiot::crossOver(int mode)
     for (i = ordStart; i < ordEnd; i++) {
       double value = colsol[i] * ratio;
       colsol[i] = value;
+#ifdef COIN_DETAIL
       objValue += value * cost[i];
+#endif
     }
     for (i = 0; i < nrows; i++) {
       double value = rowlower[i] - rowsol[i];
       colsol[i + slackStart] = value;
+#ifdef COIN_DETAIL
       objValue += value * cost[i + slackStart];
+#endif
     }
     COIN_DETAIL_PRINT(printf("New objective after scaling %g\n", objValue));
   }
@@ -1730,7 +1739,7 @@ void Idiot::crossOver(int mode)
     for (i = 0; i < nrows; i++) {
       model_->setRowStatus(i, ClpSimplex::basic);
     }
-    int ninbas = 0;
+    //int ninbas = 0;
     for (i = 0; i < ncols; i++) {
       if (columnLength[i] == 1 && upper[i] > lower[i] + 1.0e-5) {
         CoinBigIndex j = columnStart[i];
@@ -1799,7 +1808,7 @@ void Idiot::crossOver(int mode)
         if (rup - rlo < 1.0e-7 && model_->getRowStatus(irow) == ClpSimplex::basic) {
           model_->setRowStatus(irow, ClpSimplex::superBasic);
           model_->setColumnStatus(i, ClpSimplex::basic);
-          ninbas++;
+          //ninbas++;
         }
       }
     }
@@ -2108,14 +2117,18 @@ void Idiot::crossOver(int mode)
       saveRowLower = NULL;
     }
     if (addAll < 2) {
+#ifdef COIN_DEVELOP
       n = 0;
+#endif
       if (!addAll) {
         /* could do scans to get a good number */
         iteration = 1;
         for (i = ordStart; i < ordEnd; i++) {
           if (whenUsed[i] >= iteration) {
             if (upper[i] - lower[i] < 1.0e-5 && saveUpper[i] - saveLower[i] > 1.0e-5) {
+#ifdef COIN_DEVELOP
               n++;
+#endif
               upper[i] = saveUpper[i];
               lower[i] = saveLower[i];
             }
@@ -2124,7 +2137,9 @@ void Idiot::crossOver(int mode)
       } else {
         for (i = ordStart; i < ordEnd; i++) {
           if (upper[i] - lower[i] < 1.0e-5 && saveUpper[i] - saveLower[i] > 1.0e-5) {
+#ifdef COIN_DEVELOP
             n++;
+#endif
             upper[i] = saveUpper[i];
             lower[i] = saveLower[i];
           }
@@ -2173,10 +2188,14 @@ void Idiot::crossOver(int mode)
         saveModel = NULL;
       }
       if (!addAll) {
+#ifdef COIN_DEVELOP
         n = 0;
+#endif
         for (i = ordStart; i < ordEnd; i++) {
           if (upper[i] - lower[i] < 1.0e-5 && saveUpper[i] - saveLower[i] > 1.0e-5) {
+#ifdef COIN_DEVELOP
             n++;
+#endif
             upper[i] = saveUpper[i];
             lower[i] = saveLower[i];
           }

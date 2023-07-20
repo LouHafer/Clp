@@ -505,6 +505,9 @@ public:
   {
     integerInformation_[colIndex] = static_cast< char >(value);
   }
+  /// Return integer information array
+  inline const char * integerInformation() const
+  { return integerInformation_;}
   /// Get pointer to row-wise copy of matrix
   virtual const CoinPackedMatrix *getMatrixByRow() const;
 
@@ -701,6 +704,12 @@ public:
   /** Set the variables listed in indices (which is of length len) to be
       integer variables */
   virtual void setInteger(const int *indices, int len);
+  /** Modify model to deal with indicators.
+      startBigM are values in input.
+      If bigM > 0.0 then use that,
+      if < 0.0 use but try and improve */
+  virtual void modifyByIndicators(double startBigM=COIN_DBL_MAX,
+			  double bigM=-1.0e7);
   /// Number of SOS sets
   inline int numberSOS() const
   {
@@ -1364,6 +1373,14 @@ public:
   inline void setContinuousModel(ClpSimplex *model)
   {
     continuousModel_ = model;
+  }
+  /// Clean up smallModel
+  inline void zapSmallModel()
+  {
+    delete smallModel_;
+    smallModel_ = NULL;
+    delete[] spareArrays_;
+    spareArrays_ = NULL;
   }
   //@}
 

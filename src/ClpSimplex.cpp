@@ -29,6 +29,7 @@
 #include "ClpEventHandler.hpp"
 #include "ClpLinearObjective.hpp"
 #include "ClpHelperFunctions.hpp"
+#include "CoinMpsIO.hpp"
 #include "CoinModel.hpp"
 #include "CoinLpIO.hpp"
 #include <cfloat>
@@ -254,7 +255,11 @@ ClpSimplex::ClpSimplex(const ClpModel *rhs,
   , abcSimplex_(NULL)
   , abcState_(0)
 #endif
+#ifndef CLP_OLD_PROGRESS
   , minIntervalProgressUpdate_(0.7)
+#else
+  , minIntervalProgressUpdate_(-1.0)
+#endif
   , lastStatusUpdate_(0.0)
 {
   int i;
@@ -1820,7 +1825,6 @@ int ClpSimplex::internalFactorize(int solveType)
 #endif
       } else {
         // all slack basis
-        int numberBasic = 0;
         if (!status_) {
           createStatus();
         }
@@ -1837,7 +1841,6 @@ int ClpSimplex::internalFactorize(int solveType)
             rowActivityWork_[iRow] = 0.0;
           }
           setRowStatus(iRow, basic);
-          numberBasic++;
         }
         for (iColumn = 0; iColumn < numberColumns_; iColumn++) {
           double lower = columnLowerWork_[iColumn];
@@ -1891,13 +1894,11 @@ int ClpSimplex::internalFactorize(int solveType)
 #endif
       } else {
         // all slack basis
-        int numberBasic = 0;
         if (!status_) {
           createStatus();
         }
         for (iRow = 0; iRow < numberRows_; iRow++) {
           setRowStatus(iRow, basic);
-          numberBasic++;
         }
         for (iColumn = 0; iColumn < numberColumns_; iColumn++) {
           setColumnStatus(iColumn, superBasic);
@@ -2242,10 +2243,12 @@ int ClpSimplex::housekeeping(double objectiveChange)
         assert(numberColumns_ == solution->numberColumns);
         double *sol = new double[numberColumns_];
         solution->solution[solution->numberSolutions] = sol;
-        int numberFixed = 0;
         int numberUnsat = 0;
+#ifdef COIN_DETAILED
+        int numberFixed = 0;
         int numberSat = 0;
         double sumUnsat = 0.0;
+#endif
         double tolerance = 10.0 * primalTolerance_;
         double mostAway = 0.0;
         for (int i = 0; i < numberColumns_; i++) {
@@ -2262,18 +2265,26 @@ int ClpSimplex::housekeeping(double objectiveChange)
               // problem may be perturbed so relax test
               if (fabs(value - closest) > 1.0e-4) {
                 numberUnsat++;
+#ifdef COIN_DETAILED
                 sumUnsat += fabs(value - closest);
+#endif
                 if (mostAway < fabs(value - closest)) {
                   mostAway = fabs(value - closest);
                 }
               } else {
+#ifdef COIN_DETAILED
                 numberSat++;
+#endif
               }
             } else {
+#ifdef COIN_DETAILED
               numberSat++;
+#endif
             }
           } else {
+#ifdef COIN_DETAILED
             numberFixed++;
+#endif
           }
         }
         solution->numberUnsatisfied[solution->numberSolutions++] = numberUnsat;
@@ -2581,6 +2592,12 @@ ClpSimplex::ClpSimplex(const ClpModel &rhs, int scalingMode)
   , abcSimplex_(NULL)
   , abcState_(0)
 #endif
+#ifndef CLP_OLD_PROGRESS
+  , minIntervalProgressUpdate_(0.7)
+#else
+  , minIntervalProgressUpdate_(-1.0)
+#endif
+  , lastStatusUpdate_(0.0)
 {
   int i;
   for (i = 0; i < 6; i++) {
@@ -4255,7 +4272,12 @@ bool ClpSimplex::createRim(int what, bool makeRowCopy, int startFinishOptions)
         delete columnArray_[iColumn];
         columnArray_[iColumn] = new CoinIndexedVector();
       }
-      columnArray_[iColumn]->reserve(numberColumns_ + numberRows2);
+#if COIN_AVX2
+      // allow extra for chunking
+     columnArray_[iColumn]->reserve(numberColumns_ + numberRows2+3);
+#else
+     columnArray_[iColumn]->reserve(numberColumns_ + numberRows2);
+#endif
     }
   }
   if (problemStatus_ == 10) {
@@ -4604,9 +4626,9 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
   // ray may be null if in branch and bound
   if (rowScale_ && solution_) {
     // Collect infeasibilities
-    int numberPrimalScaled = 0;
+    //int numberPrimalScaled = 0;
     int numberPrimalUnscaled = 0;
-    int numberDualScaled = 0;
+    //int numberDualScaled = 0;
     int numberDualUnscaled = 0;
     double scaleC = 1.0 / objectiveScale_;
     double scaleR = 1.0 / rhsScale_;
@@ -4618,7 +4640,7 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
       double upperScaled = columnUpperWork_[i];
       if (lowerScaled > -1.0e20 || upperScaled < 1.0e20) {
         if (valueScaled < lowerScaled - primalTolerance_ || valueScaled > upperScaled + primalTolerance_)
-          numberPrimalScaled++;
+          ;//numberPrimalScaled++;
         else
           upperOut_ = CoinMax(upperOut_, CoinMin(valueScaled - lowerScaled, upperScaled - valueScaled));
       }
@@ -4629,10 +4651,10 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
       else if (value > columnUpper_[i] + primalTolerance_)
         numberPrimalUnscaled++;
       double valueScaledDual = reducedCostWork_[i];
-      if (valueScaled > columnLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
-        numberDualScaled++;
-      if (valueScaled < columnUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
-        numberDualScaled++;
+      //if (valueScaled > columnLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
+      //  numberDualScaled++;
+      //if (valueScaled < columnUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
+      //  numberDualScaled++;
       reducedCost_[i] = (valueScaledDual * scaleC) * inverseScale[i];
       double valueDual = reducedCost_[i];
       if (value > columnLower_[i] + primalTolerance_ && valueDual > dualTolerance_)
@@ -4648,7 +4670,7 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
       double upperScaled = rowUpperWork_[i];
       if (lowerScaled > -1.0e20 || upperScaled < 1.0e20) {
         if (valueScaled < lowerScaled - primalTolerance_ || valueScaled > upperScaled + primalTolerance_)
-          numberPrimalScaled++;
+          ;//numberPrimalScaled++;
         else
           upperOut_ = CoinMax(upperOut_, CoinMin(valueScaled - lowerScaled, upperScaled - valueScaled));
       }
@@ -4658,12 +4680,11 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
         numberPrimalUnscaled++;
       else if (value > rowUpper_[i] + primalTolerance_)
         numberPrimalUnscaled++;
-      double valueScaledDual = dual_[i] + rowObjectiveWork_[i];
-      ;
-      if (valueScaled > rowLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
-        numberDualScaled++;
-      if (valueScaled < rowUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
-        numberDualScaled++;
+      //double valueScaledDual = dual_[i] + rowObjectiveWork_[i];
+      //if (valueScaled > rowLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
+      //  numberDualScaled++;
+      //if (valueScaled < rowUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
+      //  numberDualScaled++;
       dual_[i] *= scaleFactor * scaleC;
       double valueDual = dual_[i];
       if (rowObjective_)
@@ -4696,9 +4717,9 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
     }
   } else if (rhsScale_ != 1.0 || objectiveScale_ != 1.0) {
     // Collect infeasibilities
-    int numberPrimalScaled = 0;
+    //int numberPrimalScaled = 0;
     int numberPrimalUnscaled = 0;
-    int numberDualScaled = 0;
+    //int numberDualScaled = 0;
     int numberDualUnscaled = 0;
     double scaleC = 1.0 / objectiveScale_;
     double scaleR = 1.0 / rhsScale_;
@@ -4708,7 +4729,7 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
       double upperScaled = columnUpperWork_[i];
       if (lowerScaled > -1.0e20 || upperScaled < 1.0e20) {
         if (valueScaled < lowerScaled - primalTolerance_ || valueScaled > upperScaled + primalTolerance_)
-          numberPrimalScaled++;
+          ;//numberPrimalScaled++;
         else
           upperOut_ = CoinMax(upperOut_, CoinMin(valueScaled - lowerScaled, upperScaled - valueScaled));
       }
@@ -4719,10 +4740,10 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
       else if (value > columnUpper_[i] + primalTolerance_)
         numberPrimalUnscaled++;
       double valueScaledDual = reducedCostWork_[i];
-      if (valueScaled > columnLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
-        numberDualScaled++;
-      if (valueScaled < columnUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
-        numberDualScaled++;
+      //if (valueScaled > columnLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
+      //  numberDualScaled++;
+      //if (valueScaled < columnUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
+      //  numberDualScaled++;
       reducedCost_[i] = valueScaledDual * scaleC;
       double valueDual = reducedCost_[i];
       if (value > columnLower_[i] + primalTolerance_ && valueDual > dualTolerance_)
@@ -4736,7 +4757,7 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
       double upperScaled = rowUpperWork_[i];
       if (lowerScaled > -1.0e20 || upperScaled < 1.0e20) {
         if (valueScaled < lowerScaled - primalTolerance_ || valueScaled > upperScaled + primalTolerance_)
-          numberPrimalScaled++;
+          ;//numberPrimalScaled++;
         else
           upperOut_ = CoinMax(upperOut_, CoinMin(valueScaled - lowerScaled, upperScaled - valueScaled));
       }
@@ -4746,12 +4767,11 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
         numberPrimalUnscaled++;
       else if (value > rowUpper_[i] + primalTolerance_)
         numberPrimalUnscaled++;
-      double valueScaledDual = dual_[i] + rowObjectiveWork_[i];
-      ;
-      if (valueScaled > rowLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
-        numberDualScaled++;
-      if (valueScaled < rowUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
-        numberDualScaled++;
+      //double valueScaledDual = dual_[i] + rowObjectiveWork_[i];
+      //if (valueScaled > rowLowerWork_[i] + primalTolerance_ && valueScaledDual > dualTolerance_)
+      //  numberDualScaled++;
+      //if (valueScaled < rowUpperWork_[i] - primalTolerance_ && valueScaledDual < -dualTolerance_)
+      //  numberDualScaled++;
       dual_[i] *= scaleC;
       double valueDual = dual_[i];
       if (rowObjective_)
@@ -5672,6 +5692,9 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
   if ((moreSpecialOptions_ & 524288) != 0 && (!nonLinearCost_ || !nonLinearCost_->numberInfeasibilities()) && fabs(dblParam_[ClpDualObjectiveLimit]) > 1.0e30) {
     problemStatus_ = 0;
   }
+  // if we are in strong branching
+  if (problemStatus_==10&&(specialOptions_&1048576)!=0)
+    problemStatus_=3;
   if (problemStatus_ == 10) {
     //printf("Cleaning up with primal\n");
 #ifdef COIN_DEVELOP
@@ -5791,10 +5814,25 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
     setInitialDenseFactorization(denseFactorization);
     perturbation_ = savePerturbation;
     if (problemStatus_ == 10) {
-      if (!numberPrimalInfeasibilities_)
+      if (!numberPrimalInfeasibilities_) {
         problemStatus_ = 0;
-      else
-        problemStatus_ = 4;
+      } else {
+ 	// we really have problems
+	if ((moreSpecialOptions_&536870912)!=0) {
+	  problemStatus_ = 4;
+	  moreSpecialOptions_ &= ~536870912;
+	} else {
+	  // try once more
+	  moreSpecialOptions_ |= 536870912;
+	  allSlackBasis();
+	  char temp[80];
+	  sprintf(temp,"We have serious accuracy problems - trying from all slack");
+	  handler_->message(CLP_GENERAL_WARNING, messages_)
+	    << temp
+	    << CoinMessageEol;
+	  primal();
+	}
+      }
     }
     handler_->setLogLevel(saveLog);
 #ifdef COIN_DEVELOP
@@ -5909,6 +5947,8 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
       secondaryStatus_ = 1; //printf("inf on obj dual %g limit %g\n",objectiveValue(),limit);
     }
   }
+  // clear serious error flags
+  moreSpecialOptions_ &= ~(1073741824|536870912);
   return returnCode;
 }
 // primal
@@ -6157,7 +6197,21 @@ int ClpSimplex::primal(int ifValuesPass, int startFinishOptions)
         problemStatus_ = 0;
         numberDualInfeasibilities_ = 0;
       } else {
-        problemStatus_ = 4;
+	// we really have problems
+	if ((moreSpecialOptions_&1073741824)!=0) {
+	  problemStatus_ = 4;
+	  moreSpecialOptions_ &= ~1073741824;
+	} else {
+	  // try once more
+	  moreSpecialOptions_ |= 1073741824;
+	  allSlackBasis();
+	  char temp[80];
+	  sprintf(temp,"We have serious accuracy problems - trying from all slack");
+	  handler_->message(CLP_GENERAL_WARNING, messages_)
+	    << temp
+	    << CoinMessageEol;
+	  dual();
+	}
       }
     }
   }
@@ -6198,6 +6252,8 @@ int ClpSimplex::primal(int ifValuesPass, int startFinishOptions)
       secondaryStatus_ = 1; //printf("inf on obj primal %g limit %g\n",objectiveValue(),limit);
     }
   }
+  // clear serious error flags
+  moreSpecialOptions_ &= ~(1073741824|536870912);
   //if (problemStatus_==1&&lastAlgorithm==1)
   //returnCode=10; // so will do primal after postsolve
   return returnCode;
@@ -6394,7 +6450,7 @@ int ClpSimplex::reducedGradient(int phase)
 #include "ClpPresolve.hpp"
 /* Solves using barrier (assumes you have good cholesky factor code).
    Does crossover to simplex if asked*/
-int ClpSimplex::barrier(bool crossover)
+int ClpSimplex::barrier(bool crossover, int startFinishOptions)
 {
   ClpSimplex *model2 = this;
   int savePerturbation = perturbation_;
@@ -6629,12 +6685,12 @@ int ClpSimplex::barrier(bool crossover)
     //     model2->setObjectiveScale(1.0e-3);
     //     model2->primal(2);
     //    model2->setObjectiveScale(saveScale);
-    model2->primal(1);
+    model2->primal(1,startFinishOptions);
   } else if (barrierStatus == 4 && crossover) {
     // memory problems
     model2->setPerturbation(savePerturbation);
     model2->createStatus();
-    model2->dual();
+    model2->dual(0,startFinishOptions);
   }
   model2->setMaximumIterations(saveMaxIts);
   delete[] rowPrimal;
@@ -6653,7 +6709,7 @@ int ClpSimplex::barrier(bool crossover)
     CoinMemcpyN(saveUpper, numberColumns, model2->columnUpper());
     CoinMemcpyN(saveUpper + numberColumns, numberRows, model2->rowUpper());
     delete[] saveUpper;
-    model2->primal(1);
+    model2->primal(1,startFinishOptions);
   }
   model2->setPerturbation(savePerturbation);
   return model2->status();
@@ -9941,9 +9997,13 @@ ClpSimplex::ClpSimplex(ClpSimplex *wholeModel,
 
   double *lower = lower_ + numberColumns;
   double *upper = upper_ + numberColumns;
+#ifdef COIN_DETAIL
   double fixed = 0.0;
+#endif
   for (iRow = 0; iRow < numberRows_; iRow++) {
+#ifdef COIN_DETAIL
     fixed += fabs(sumFixed[iRow]);
+#endif
     if (lower[iRow] > -1.0e50)
       lower[iRow] -= sumFixed[iRow];
     if (upper[iRow] < 1.0e50)
@@ -11812,6 +11872,13 @@ int ClpSimplex::fathom(void *stuff)
           numberIterations, numberNodes);
 #endif
         break;
+      } else if (numberNodes>1000) {
+        info->nNodes_ = -2;
+#ifdef CLP_USEFUL_PRINTOUT
+        printf("too many nodes %d iterations %d nodes\n",
+          numberIterations, numberNodes);
+#endif
+        break;
       }
     } else {
       if (numberIterations > 4000) {
@@ -12218,7 +12285,7 @@ int ClpSimplex::fathomMany(void *stuff)
     delete[] whichColumn;
     return whichSolution;
   }
-#ifndef DEBUG
+#ifndef NDEBUG
   {
     int nBasic = 0;
     int i;
@@ -12229,6 +12296,8 @@ int ClpSimplex::fathomMany(void *stuff)
     assert(nBasic == numberRows_);
   }
 #endif
+  if (perturbation_==50)
+    perturbation_ = 51; // dial down
   int returnCode = startFastDual2(info);
   if (returnCode) {
     stopFastDual2(info);
@@ -12263,8 +12332,8 @@ int ClpSimplex::fathomMany(void *stuff)
     info->numberNodesExplored_ = 0;
     info->numberIterations_ = numberIterations;
     return -1;
-  } else if (problemStatus_ != 0) {
-    abort();
+    //} else if (problemStatus_ != 0) {
+    //abort();
   }
   if (!columnScale_) {
     CoinMemcpyN(solution_, numberColumns_, columnActivity_);
@@ -12374,6 +12443,13 @@ int ClpSimplex::fathomMany(void *stuff)
     if ((numberNodes % 1000) == 0 && printing)
       printf("After %d nodes (%d iterations) - best solution %g - current depth %d\n",
         numberNodes, numberIterations, bestObjective, depth);
+    if (problemStatus_ > 1) {
+      allSlackBasis();
+      int save = forceFactorization_;
+      forceFactorization_ = 1;
+      fastDual2(info);
+      forceFactorization_ = save;
+    }
     if (problemStatus_ == 1 || (problemStatus_ == 0 && objectiveValue() * optimizationDirection_ > bestObjective)) {
       backtrack = true;
       if (printing)
