@@ -274,6 +274,22 @@ int ClpPredictorCorrector::solve()
     //complementarityGap_*2.0<historyInfeasibility_[0])
     //saveIteration=-1;
     lastStep = CoinMin(actualPrimalStep_, actualDualStep_);
+    // See if not getting anywhere
+    if (numberIterations_>50) {
+      if (lastStep<1.0e-18) {
+	handler_->message(CLP_GENERAL, messages_)
+	  << "Barrier not making any progress - exiting"
+	  << CoinMessageEol;
+	problemStatus_=-1;
+	break;
+      } else if (complementarityGap_>1.01*historyInfeasibility_[0]) {
+	handler_->message(CLP_GENERAL, messages_)
+	  << "Complementarity gap oscillating - exiting"
+	  << CoinMessageEol;
+	problemStatus_=-1;
+	break;
+      }
+    }
     CoinWorkDouble goodGapChange;
     //#define KEEP_GOING_IF_FIXED 5
 #ifndef KEEP_GOING_IF_FIXED
@@ -891,6 +907,8 @@ int ClpPredictorCorrector::solve()
     // save last gap
     checkGap = complementarityGap_;
     numberFixed = updateSolution(nextGap);
+    if (numberFixed<0)
+      break;
     numberFixedTotal += numberFixed;
   } /* endwhile */
   delete[] saveX;
@@ -3483,7 +3501,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
 #endif
         diagonal_[iColumn] = diagonalValue;
         //FUDGE
-        if (diagonalValue > diagonalLimit) {
+        if (fabs(diagonalValue) > diagonalLimit) {
 #ifdef COIN_DEVELOP
           std::cout << "large diagonal " << diagonalValue << std::endl;
 #endif
@@ -3677,12 +3695,18 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
   }
   //objectiveValue();
   if (solutionNorm_ > 1.0e40) {
-    std::cout << "primal off to infinity" << std::endl;
-    abort();
+    handler_->message(CLP_GENERAL, messages_)
+    << "Barrier thinks infeasible"
+    << CoinMessageEol;
+    problemStatus_=1;
+    return -1;
   }
   if (objectiveNorm_ > 1.0e40) {
-    std::cout << "dual off to infinity" << std::endl;
-    abort();
+    handler_->message(CLP_GENERAL, messages_)
+    << "Barrier thinks infeasible"
+    << CoinMessageEol;
+    problemStatus_=1;
+    return -1;
   }
   handler_->message(CLP_BARRIER_STEP, messages_)
     << static_cast< double >(actualPrimalStep_)

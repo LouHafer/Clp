@@ -997,6 +997,14 @@ int ClpSimplex::initialSolve(ClpSolve &options)
         return -1;
       }
       presolve = ClpSolve::presolveOff;
+      // Barrier no good at infeasible problems
+      if (method == ClpSolve::useBarrier ||
+	  method == ClpSolve::useBarrierNoCross) {
+	method = ClpSolve::usePrimal;
+	handler_->message(CLP_GENERAL, messages_)
+	  << "Looks infeasible - using Simplex rather than barrier"
+	  << CoinMessageEol;
+      }
     } else {
 #if 0 //def ABC_INHERIT
 	    {
@@ -3842,7 +3850,9 @@ int ClpSimplex::initialSolve(ClpSolve &options)
       int savePerturbation = perturbation();
       if (savePerturbation == 50)
         setPerturbation(51); // small
-      if (!finalStatus || finalStatus == 2 || (moreSpecialOptions_ & 2) == 0 || fabs(sumDual) + fabs(sumPrimal) < 1.0e-3) {
+      if ((finalStatus>=0 && finalStatus <= 2) ||
+	  (moreSpecialOptions_ & 2) == 0 ||
+	  fabs(sumDual) + fabs(sumPrimal) < 1.0e-3) {
         if (finalStatus == 2) {
           if (sumDual > 1.0e-4) {
             // unbounded - get feasible first
@@ -4043,7 +4053,25 @@ int ClpSimplex::initialBarrierNoCrossSolve()
   ClpSolve options;
   // Use primal
   options.setSolveType(ClpSolve::useBarrierNoCross);
-  return initialSolve(options);
+  int returnCode = initialSolve(options);
+  // clean for simplex and put slacks in basis
+  for (int i=0;i<numberRows_;i++)
+    status_[i+numberColumns_] = ClpSimplex::basic;
+  for (int i=0;i<numberColumns_;i++) {
+    if (columnLower_[i]==columnUpper_[i]) {
+      columnActivity_[i] = columnLower_[i];
+      status_[i] = ClpSimplex::isFixed;
+    } else if (columnActivity_[i]<=columnLower_[i]) {
+      columnActivity_[i] = columnLower_[i];
+      status_[i] = ClpSimplex::atLowerBound;
+    } else if (columnActivity_[i]>=columnUpper_[i]) {
+      columnActivity_[i] = columnUpper_[i];
+      status_[i] = ClpSimplex::atUpperBound;
+    } else {
+      status_[i] = ClpSimplex::superBasic;
+    }
+  }
+  return returnCode;
 }
 
 // General barrier solve

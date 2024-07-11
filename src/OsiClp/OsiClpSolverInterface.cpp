@@ -858,6 +858,7 @@ disaster:
     if (save < 2)
       modelPtr_->setLogLevel(0);
     modelPtr_->dual(0, startFinishOptions);
+    lastAlgorithm_ = 2;
     totalIterations += modelPtr_->numberIterations();
     modelPtr_->setLogLevel(save);
   }
@@ -1638,16 +1639,16 @@ void OsiClpSolverInterface::setupForRepeatedUse(int senseOfAdventure, int printO
   // First try
   switch (senseOfAdventure) {
   case 0:
-    specialOptions_ = 8;
+    specialOptions_ |= 8;
     break;
   case 1:
-    specialOptions_ = 1 + 2 + 8;
+    specialOptions_ |= 1 + 2 + 8;
     break;
   case 2:
-    specialOptions_ = 1 + 2 + 4 + 8;
+    specialOptions_ |= 1 + 2 + 4 + 8;
     break;
   case 3:
-    specialOptions_ = 1 + 8;
+    specialOptions_ |= 1 + 8;
     break;
   }
   //#define NO_CRUNCH2
@@ -7939,9 +7940,14 @@ void OsiClpSolverInterface::crunch()
     small = static_cast< ClpSimplexOther * >(modelPtr_)->crunch(rhs, whichRow, whichColumn,
       nBound, moreBounds, tightenBounds);
 #ifndef NDEBUG
-    int nCopy = 3 * numberRows + 2 * numberColumns;
-    for (int i = 0; i < nCopy; i++)
-      assert(whichRow[i] >= -CoinMax(numberRows, numberColumns) && whichRow[i] < CoinMax(numberRows, numberColumns));
+    if (small) {
+      int nCopy = 3 * numberRows + 2 * numberColumns;
+      for (int i = 0; i < nCopy; i++) {
+	if (i>=small->getNumRows()&&i<numberRows)
+	  continue;  // row was removed so doesn't matter
+	assert(whichRow[i] >= -CoinMax(numberRows, numberColumns) && whichRow[i] < CoinMax(numberRows, numberColumns));
+      }
+    }
 #endif
     smallModel_ = small;
     spareArrays_ = spareArrays;
@@ -7953,8 +7959,11 @@ void OsiClpSolverInterface::crunch()
     int nCopy = 3 * numberRows + 2 * numberColumns;
     nBound = whichRow[nCopy];
 #ifndef NDEBUG
-    for (int i = 0; i < nCopy; i++)
+    for (int i = 0; i < nCopy; i++) {
+      if (i>=smallModel_->getNumRows()&&i<numberRows)
+	continue;  // row was removed so doesn't matter
       assert(whichRow[i] >= -CoinMax(numberRows, numberColumns) && whichRow[i] < CoinMax(numberRows, numberColumns));
+    }
 #endif
     small = smallModel_;
   }

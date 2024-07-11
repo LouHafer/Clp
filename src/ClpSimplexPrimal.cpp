@@ -233,7 +233,7 @@ int ClpSimplexPrimal::primal(int ifValuesPass, int startFinishOptions)
   // initialize - maybe values pass and algorithm_ is +1
 #if 0
      // if so - put in any superbasic costed slacks
-     if (ifValuesPass && specialOptions_ < 0x01000000) {
+  if (ifValuesPass && (specialOptions_&0x03000000)==0) {
           // Get column copy
           const CoinPackedMatrix * columnCopy = matrix();
           const int * row = columnCopy->getIndices();
@@ -1123,12 +1123,10 @@ void ClpSimplexPrimal::statusOfProblemInPrimal(int &lastCleaned, int type,
       sumDualInfeasibilities_ = 0.0;
     }
   }
-  // Check if looping
+  // Check if looping (can't loop in values pass)
   int loop;
-  if (type != 2) {
+  if (type != 2 && !ifValuesPass) {
     loop = progress->looping();
-    if (ifValuesPass && loop != 3)
-      loop = -1;
   } else {
     loop = -1;
   }
@@ -1170,7 +1168,7 @@ void ClpSimplexPrimal::statusOfProblemInPrimal(int &lastCleaned, int type,
   //problemStatus_=-1;;
   progressFlag_ = 0; //reset progress flag
 
-  if ((CoinWallclockTime() - lastStatusUpdate_ > minIntervalProgressUpdate_)) {
+  if (handler_->logLevel()>0&& (CoinWallclockTime() - lastStatusUpdate_ > minIntervalProgressUpdate_)) {
     handler_->message(CLP_SIMPLEX_STATUS, messages_)
       << numberIterations_ << nonLinearCost_->feasibleReportCost();
     handler_->printing(nonLinearCost_->numberInfeasibilities() > 0)
@@ -1403,6 +1401,15 @@ void ClpSimplexPrimal::statusOfProblemInPrimal(int &lastCleaned, int type,
         printf("nonLinearCost says infeasible %d summing to %g\n",
           ninfeas, sum);
 #endif
+      // Need to increase infeasibility cost (keep Henning happy)
+      if (infeasibilityCost_ < 1.0e14) {
+        infeasibilityCost_ *= 5.0;
+        // reset looping criterion
+        progress->reset();
+        if (handler_->logLevel() == 63)
+          printf("increasing weight to %g\n", infeasibilityCost_);
+        gutsOfSolution(NULL, NULL, ifValuesPass != 0);
+      }
       if (average > relaxedToleranceP) {
         sumOfRelaxedPrimalInfeasibilities_ = sum;
         numberPrimalInfeasibilities_ = ninfeas;
@@ -1474,18 +1481,25 @@ void ClpSimplexPrimal::statusOfProblemInPrimal(int &lastCleaned, int type,
             //if ((specialOptions_&(32|0x01000000))!=0x01000000) {
             if ((specialOptions_ & 0x03000000) == 0) {
               ray_ = new double[numberRows_];
+	      // obliterate cost
               double *saveObjective = CoinCopyOfArray(objective(),
                 numberColumns_);
               memset(objective(), 0, numberColumns_ * sizeof(double));
-              infeasibilityCost_ = 1.0;
+              infeasibilityCost_ = 1.0e100;
               createRim(4);
               nonLinearCost_->checkInfeasibilities(primalTolerance_);
+	      for (int i=0;i<numberColumns_+numberRows_;i++) {
+		if (fabs(cost_[i])!=1.0e100)
+		  cost_[i] = 0.0;
+		else
+		  cost_[i] /= 1.0e100;
+	      }
               gutsOfSolution(NULL, NULL, false);
               memcpy(objective(), saveObjective, numberColumns_ * sizeof(double));
               delete[] saveObjective;
               // swap sign
-              for (int i = 0; i < numberRows_; i++)
-                ray_[i] = -dual_[i];
+              for (int i = 0; i < numberRows_; i++) 
+                ray_[i] = -dual_[i]/1.0e100;
             } else {
               ray_ = NULL;
             }
@@ -3991,7 +4005,7 @@ int ClpSimplexPrimal::lexSolve()
      // if so - put in any superbasic costed slacks
      // Start can skip some things in transposeTimes
      specialOptions_ |= 131072;
-     if (ifValuesPass && specialOptions_ < 0x01000000) {
+     if (ifValuesPass && (specialOptions_&0x03000000)==0) {
           // Get column copy
           const CoinPackedMatrix * columnCopy = matrix();
           const int * row = columnCopy->getIndices();

@@ -3,7 +3,6 @@
 // This code is licensed under the terms of the Eclipse Public License (EPL).
 
 //#undef NDEBUG
-
 #include "ClpConfig.h"
 
 #include "CoinPragma.hpp"
@@ -132,7 +131,7 @@ ClpSimplex::ClpSimplex(bool emptyMessages)
   , abcSimplex_(NULL)
   , abcState_(0)
 #endif
-#ifndef CLP_OLD_PROGRESS
+#if CLP_OLD_PROGRESS==0
   , minIntervalProgressUpdate_(0.7)
 #else
   , minIntervalProgressUpdate_(-1.0)
@@ -255,7 +254,7 @@ ClpSimplex::ClpSimplex(const ClpModel *rhs,
   , abcSimplex_(NULL)
   , abcState_(0)
 #endif
-#ifndef CLP_OLD_PROGRESS
+#if CLP_OLD_PROGRESS==0
   , minIntervalProgressUpdate_(0.7)
 #else
   , minIntervalProgressUpdate_(-1.0)
@@ -2592,7 +2591,7 @@ ClpSimplex::ClpSimplex(const ClpModel &rhs, int scalingMode)
   , abcSimplex_(NULL)
   , abcState_(0)
 #endif
-#ifndef CLP_OLD_PROGRESS
+#if CLP_OLD_PROGRESS==0
   , minIntervalProgressUpdate_(0.7)
 #else
   , minIntervalProgressUpdate_(-1.0)
@@ -5588,7 +5587,6 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
 
          This is to stop classes becoming too unwieldy and so I (JJF) can use e.g. "perturb"
          in primal and dual.
-
          As far as I can see this is perfectly safe.
      */
 #ifdef COIN_DEVELOP
@@ -5683,7 +5681,8 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
 #endif
   //int lastAlgorithm = -1;
   if ((specialOptions_ & 2048) != 0 && problemStatus_ == 10 && !numberPrimalInfeasibilities_
-    && sumDualInfeasibilities_ < 50.0 * dualTolerance_ && perturbation_ >= 100)
+      && sumDualInfeasibilities_ < 50.0 * dualTolerance_
+      && perturbation_ >= 100 && objectiveValue_ >= bestObjectiveValue_)
     problemStatus_ = 0; // ignore
   if (problemStatus_ == 1 && ((specialOptions_ & (1024 | 4096)) == 0 || (specialOptions_ & 32) != 0)
     && (static_cast< ClpSimplexDual * >(this))->checkFakeBounds()) {
@@ -7453,6 +7452,7 @@ ClpSimplex::valueIncomingDual() const
 // Sanity check on input data - returns true if okay
 bool ClpSimplex::sanityCheck()
 {
+#if 0 // can't say bad - just because empty
   // bad if empty
   if (!numberColumns_ || ((!numberRows_ || !matrix_->getNumElements()) && objective_->type() < 2)) {
     int infeasNumber[2];
@@ -7464,6 +7464,7 @@ bool ClpSimplex::sanityCheck()
     sumPrimalInfeasibilities_ = infeasSum[1];
     return false;
   }
+#endif
   int numberBad;
   double largestBound, smallestBound, minimumGap;
   double smallestObj, largestObj;
@@ -9551,7 +9552,7 @@ void ClpSimplex::restoreData(ClpDataSave saved)
   rhsScale_ = saved.rhsScale_;
   acceptablePivot_ = saved.acceptablePivot_;
 }
-#if CLP_CHECK_SCALING
+#if CLP_CHECK_SCALING 
 /* Deals with badly scaled problems
    Returns COIN_INT_MAX if well scaled
    otherwise when to check again.
@@ -11453,6 +11454,7 @@ int ClpSimplex::fathom(void *stuff)
     int *whichColumn = new int[2 * numberColumns_];
     int nBound;
     bool tightenBounds = ((specialOptions_ & 64) == 0) ? false : true;
+    numberRows_=-numberRows_;//!! flag to say do more work (if test in crunch)
     ClpSimplex *small = static_cast< ClpSimplexOther * >(this)->crunch(rhs, whichRow, whichColumn,
       nBound, false, tightenBounds);
     if (small) {
@@ -12175,6 +12177,7 @@ int ClpSimplex::fathomMany(void *stuff)
     int *whichRow = new int[3 * numberRows_];
     int *whichColumn = new int[2 * numberColumns_];
     int nBound;
+    numberRows_=-numberRows_;//!! flag to say do more work (if test in crunch)
     bool tightenBounds = ((specialOptions_ & 64) == 0) ? false : true;
     ClpSimplex *small = static_cast< ClpSimplexOther * >(this)->crunch(rhs, whichRow, whichColumn,
       nBound, false, tightenBounds);
@@ -13032,6 +13035,8 @@ int ClpSimplex::fastDual2(ClpNodeStuff *info)
 #endif
   if (goodWeights)
     status = 100;
+  if (!problemStatus_) 
+    computeObjectiveValue(); // be on safe side
   return status;
 }
 // Stop Fast dual

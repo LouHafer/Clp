@@ -327,6 +327,8 @@ int ClpSimplexDual::startupSolve(int ifValuesPass, double *saveDuals, int startF
         usePrimal = perturb();
       // Can't get here if values pass
       gutsOfSolution(NULL, NULL);
+      // save for later check
+      bestObjectiveValue_=objectiveValue_;
 #ifdef CLP_INVESTIGATE
       if (numberDualInfeasibilities_)
         printf("ZZZ %d primal %d dual - sumdinf %g\n",
@@ -438,7 +440,7 @@ void ClpSimplexDual::gutsOfDual(int ifValuesPass, double *&saveDuals, int initia
   // Start check for cycles
   progress_.startCheck();
 #if CLP_CHECK_SCALING
-  if ((moreSpecialOptions_&256)!=0)
+  if ((moreSpecialOptions_&(256|8192))!=0)
     progress_.checkScalingEtc();
 #endif
   // Say change made on first iteration
@@ -525,7 +527,7 @@ void ClpSimplexDual::gutsOfDual(int ifValuesPass, double *&saveDuals, int initia
     smallestPrimalInfeasibility = CoinMin(smallestPrimalInfeasibility,
       sumPrimalInfeasibilities_);
     lastObjectiveValue = objectiveValue_;
-    if (sumPrimalInfeasibilities_ > 1.0e5 && sumPrimalInfeasibilities_ > 1.0e5 * smallestPrimalInfeasibility && (moreSpecialOptions_ & 256) == 0 && ((progress_.lastObjective(0) < -1.0e10 && -progress_.lastObjective(1) > -1.0e5) || sumPrimalInfeasibilities_ > 1.0e10 * smallestPrimalInfeasibility) && problemStatus_ < 0) {
+    if (sumPrimalInfeasibilities_ > 1.0e5 && sumPrimalInfeasibilities_ > 1.0e5 * smallestPrimalInfeasibility && (moreSpecialOptions_ &(256|8192)) == 0 && ((progress_.lastObjective(0) < -1.0e10 && -progress_.lastObjective(1) > -1.0e5) || sumPrimalInfeasibilities_ > 1.0e10 * smallestPrimalInfeasibility) && problemStatus_ < 0) {
       // problems - try primal
       problemStatus_ = 10;
       // mark as large infeasibility cost wanted
@@ -585,7 +587,7 @@ void ClpSimplexDual::gutsOfDual(int ifValuesPass, double *&saveDuals, int initia
       }
     }
     // If looks odd try other way
-    if ((moreSpecialOptions_ & 256) == 0 && fabs(objectiveValue_) > 1.0e20 && sumDualInfeasibilities_ > 1.0
+    if ((moreSpecialOptions_ &(256|8192)) == 0 && fabs(objectiveValue_) > 1.0e20 && sumDualInfeasibilities_ > 1.0
       && problemStatus_ < 0) {
       problemStatus_ = 10;
       break;
@@ -676,7 +678,7 @@ int ClpSimplexDual::dual(int ifValuesPass, int startFinishOptions)
     if (averageInfeasibility < factor * largestPrimalError_)
       problemStatus_ = 10;
     if (problemStatus_==1 && (specialOptions_&1024)==0
-	&& (moreSpecialOptions_&256) == 0 ) {
+	&& (moreSpecialOptions_&(256|8192)) == 0 ) {
       // check if any free variables have non-zero dj etc
       getSolution(NULL,NULL);
       if (numberDualInfeasibilities_) {
@@ -1325,7 +1327,7 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
 	    problemStatus_=1;
 	}
 #if CAN_HAVE_ZERO_OBJ > 1
-        if ((specialOptions_ & 16777216) != 0)
+        if ((specialOptions_ & 0x04000000) != 0)
           theta_ = 0.0;
 #endif
       } else {
@@ -1503,7 +1505,7 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
         //columnArray_[0]->cleanAndPackSafe(1.0e-60);
         if (candidate == -1) {
 #if CLP_CAN_HAVE_ZERO_OBJ > 1
-          if ((specialOptions_ & 16777216) == 0) {
+          if ((specialOptions_ & 0x04000000) == 0) {
 #endif
             // make sure incoming doesn't count
             Status saveStatus = getStatus(sequenceIn_);
@@ -1845,6 +1847,8 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
         } else if (whatNext == 2) {
           // maximum iterations or equivalent
           problemStatus_ = 3;
+	  if ((specialOptions_&0x08000000)!=0)
+	    gutsOfSolution(NULL,NULL); // clean up
           returnCode = 3;
           break;
         }
@@ -1988,7 +1992,7 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
               double sumPrimal = (!numberFake) ? 2.0e5 : sumPrimalInfeasibilities_;
               if (sumPrimalInfeasibilities_ < 1.0e-3 || sumDualInfeasibilities_ > 1.0e-5 || (sumPrimal < 1.0e5 && (specialOptions_ & 1024) != 0 && factorization_->pivots())) {
                 if ((sumPrimal > 50.0 && factorization_->pivots() > 2)
-		    || (moreSpecialOptions_&256)!=0 && factorization_->pivots()) {
+		    || (moreSpecialOptions_&(256|8192))!=0 && factorization_->pivots()) {
                   problemStatus_ = -4;
 #ifdef COIN_DEVELOP
                   printf("status to -4 at %d - primalinf %g pivots %d\n",
@@ -2011,7 +2015,7 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
 #endif
                   // Get rid of objective
                   if ((specialOptions_ & 16384) == 0 &&
-		      (moreSpecialOptions_ & 256) == 0)
+		      (moreSpecialOptions_ &(256|8192)) == 0)
                     objective_ = new ClpLinearObjective(NULL, numberColumns_);
                 }
               }
@@ -2031,7 +2035,7 @@ int ClpSimplexDual::whileIterating(double *&givenDuals, int ifValuesPass)
 #endif
                   // Get rid of objective
                   if ((specialOptions_ & 16384) == 0 &&
-		      (moreSpecialOptions_ & 256) == 0)
+		      (moreSpecialOptions_ &(256|8192)) == 0)
                     objective_ = new ClpLinearObjective(NULL, numberColumns_);
                 }
               }
@@ -5421,7 +5425,7 @@ void ClpSimplexDual::statusOfProblemInDual(int &lastCleaned, int type,
   // mark as having gone optimal if looks like it
   if (!numberPrimalInfeasibilities_ && !numberDualInfeasibilities_)
     progressFlag_ |= 8;
-  if (handler_->detail(CLP_SIMPLEX_STATUS, messages_) < 100 && (CoinWallclockTime() - lastStatusUpdate_ > minIntervalProgressUpdate_)) {
+  if (handler_->logLevel()>0&&handler_->detail(CLP_SIMPLEX_STATUS, messages_) < 100 && (CoinWallclockTime() - lastStatusUpdate_ > minIntervalProgressUpdate_)) {
     handler_->message(CLP_SIMPLEX_STATUS, messages_)
       << numberIterations_ << objectiveValue();
     handler_->printing(sumPrimalInfeasibilities_ > 0.0)
@@ -5601,7 +5605,7 @@ void ClpSimplexDual::statusOfProblemInDual(int &lastCleaned, int type,
           }
           if (lastCleaned < numberIterations_ && numberTimesOptimal_ < 4 && (numberChanged_ || (specialOptions_ & 4096) == 0)) {
 #if CLP_CAN_HAVE_ZERO_OBJ
-            if ((specialOptions_ & 16777216) == 0) {
+            if ((specialOptions_ & 0x04000000) == 0) {
 #endif
               doOriginalTolerance = 2;
               numberTimesOptimal_++;
@@ -5879,7 +5883,7 @@ void ClpSimplexDual::statusOfProblemInDual(int &lastCleaned, int type,
         if (givenDuals)
           dualTolerance_ = 1.0e50;
 #if CLP_CAN_HAVE_ZERO_OBJ > 1
-        if ((specialOptions_ & 16777216) == 0) {
+        if ((specialOptions_ & 0x04000000) == 0) {
 #endif
           updateDualsInDual(rowArray_[0], columnArray_[0], rowArray_[1],
             0.0, objectiveChange, true);
@@ -5921,7 +5925,7 @@ void ClpSimplexDual::statusOfProblemInDual(int &lastCleaned, int type,
         if (givenDuals)
           dualTolerance_ = 1.0e50;
 #if CLP_CAN_HAVE_ZERO_OBJ > 1
-        if ((specialOptions_ & 16777216) == 0) {
+        if ((specialOptions_ & 0x04000000) == 0) {
 #endif
           updateDualsInDual(rowArray_[0], columnArray_[0], rowArray_[1],
             0.0, objectiveChange, true);
@@ -6005,7 +6009,7 @@ void ClpSimplexDual::statusOfProblemInDual(int &lastCleaned, int type,
       } else {
         unflagVariables = false;
         //secondaryStatus_ = 1; // and say probably infeasible
-        if ((moreSpecialOptions_ & 256) == 0) {
+        if ((moreSpecialOptions_ &(256|8192)) == 0) {
           // try primal
           problemStatus_ = 10;
         } else {
