@@ -147,12 +147,12 @@ ClpPlusMinusOneMatrix::ClpPlusMinusOneMatrix(const CoinPackedMatrix &rhs)
       int iRow;
       if (fabs(elementByColumn[k] - 1.0) < 1.0e-10) {
         iRow = row[k];
-        numberRows_ = CoinMax(numberRows_, iRow);
+        numberRows_ = std::max(numberRows_, iRow);
         indices_[j++] = iRow;
         numberGoodP++;
       } else if (fabs(elementByColumn[k] + 1.0) < 1.0e-10) {
         iRow = row[k];
-        numberRows_ = CoinMax(numberRows_, iRow);
+        numberRows_ = std::max(numberRows_, iRow);
         temp[iNeg++] = iRow;
         numberGoodM++;
       } else {
@@ -1516,8 +1516,8 @@ void ClpPlusMinusOneMatrix::checkValid(bool detail) const
   CoinAssertHint(!bad, "starts are not monotonic");
   (void)bad;
   for (CoinBigIndex cbi = 0; cbi < numberElements; cbi++) {
-    maxIndex = CoinMax(indices_[cbi], maxIndex);
-    minIndex = CoinMin(indices_[cbi], minIndex);
+    maxIndex = std::max(indices_[cbi], maxIndex);
+    minIndex = std::min(indices_[cbi], minIndex);
   }
   CoinAssert(maxIndex < (columnOrdered_ ? numberRows_ : numberColumns_));
   CoinAssert(minIndex >= 0);
@@ -1525,32 +1525,6 @@ void ClpPlusMinusOneMatrix::checkValid(bool detail) const
     if (minIndex > 0 || maxIndex + 1 < (columnOrdered_ ? numberRows_ : numberColumns_))
       printf("Not full range of indices - %d to %d\n", minIndex, maxIndex);
   }
-}
-/* Given positive integer weights for each row fills in sum of weights
-   for each column (and slack).
-   Returns weights vector
-*/
-CoinBigIndex *
-ClpPlusMinusOneMatrix::dubiousWeights(const ClpSimplex *model, int *inputWeights) const
-{
-  int numberRows = model->numberRows();
-  int numberColumns = model->numberColumns();
-  int number = numberRows + numberColumns;
-  CoinBigIndex *weights = new CoinBigIndex[number];
-  int i;
-  for (i = 0; i < numberColumns; i++) {
-    CoinBigIndex j;
-    CoinBigIndex count = 0;
-    for (j = startPositive_[i]; j < startPositive_[i + 1]; j++) {
-      int iRow = indices_[j];
-      count += inputWeights[iRow];
-    }
-    weights[i] = count;
-  }
-  for (i = 0; i < numberRows; i++) {
-    weights[i + numberColumns] = inputWeights[i];
-  }
-  return weights;
 }
 // Append Columns
 void ClpPlusMinusOneMatrix::appendCols(int number, const CoinPackedVectorBase *const *columns)
@@ -1744,7 +1718,7 @@ void ClpPlusMinusOneMatrix::partialPricing(ClpSimplex *model, double startFracti
 {
   numberWanted = currentWanted_;
   int start = static_cast< int >(startFraction * numberColumns_);
-  int end = CoinMin(static_cast< int >(endFraction * numberColumns_ + 1), numberColumns_);
+  int end = std::min(static_cast< int >(endFraction * numberColumns_ + 1), numberColumns_);
   CoinBigIndex j;
   double tolerance = model->currentDualTolerance();
   double *COIN_RESTRICT reducedCost = model->djRegion();
@@ -1987,13 +1961,13 @@ int ClpPlusMinusOneMatrix::transposeTimes2(const ClpSimplex *model,
         if (thisWeight < DEVEX_TRY_NORM) {
           if (referenceIn < 0.0) {
             // steepest
-            thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+            thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
           } else {
             // exact
             thisWeight = referenceIn * pivotSquared;
             if (reference(iColumn))
               thisWeight += 1.0;
-            thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+            thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
           }
         }
         weights[iColumn] = thisWeight;
@@ -2041,13 +2015,13 @@ int ClpPlusMinusOneMatrix::transposeTimes2(const ClpSimplex *model,
         if (thisWeight < DEVEX_TRY_NORM) {
           if (referenceIn < 0.0) {
             // steepest
-            thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+            thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
           } else {
             // exact
             thisWeight = referenceIn * pivotSquared;
             if (reference(iColumn))
               thisWeight += 1.0;
-            thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+            thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
           }
         }
         weights[iColumn] = thisWeight;
@@ -2104,13 +2078,13 @@ void ClpPlusMinusOneMatrix::subsetTimes2(const ClpSimplex *,
     if (thisWeight < DEVEX_TRY_NORM) {
       if (referenceIn < 0.0) {
         // steepest
-        thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+        thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
       } else {
         // exact
         thisWeight = referenceIn * pivotSquared;
         if (reference(iColumn))
           thisWeight += 1.0;
-        thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+        thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
       }
     }
     weights[iColumn] = thisWeight;
@@ -2432,8 +2406,8 @@ ClpPoolMatrix::ClpPoolMatrix(int numberColumns, CoinBigIndex *columnStart,
          k++) {
       int iRow = stuff_[k].row_;
       int iPool = stuff_[k].pool_;
-      numberDifferent_ = CoinMax(numberDifferent_, iPool);
-      numberRows_ = CoinMax(numberRows_, iRow);
+      numberDifferent_ = std::max(numberDifferent_, iPool);
+      numberRows_ = std::max(numberRows_, iRow);
     }
   }
   // adjust
@@ -3219,11 +3193,11 @@ void ClpPoolMatrix::rangeOfElements(double &smallestNegative, double &largestNeg
   for (int i = 0; i < numberDifferent_; i++) {
     double value = elements_[i];
     if (value > 0.0) {
-      smallestPositive = CoinMin(smallestPositive, value);
-      largestPositive = CoinMax(largestPositive, value);
+      smallestPositive = std::min(smallestPositive, value);
+      largestPositive = std::max(largestPositive, value);
     } else if (value < 0.0) {
-      smallestNegative = CoinMax(smallestNegative, value);
-      largestNegative = CoinMin(largestNegative, value);
+      smallestNegative = std::max(smallestNegative, value);
+      largestNegative = std::min(largestNegative, value);
     }
   }
 }
@@ -3279,7 +3253,7 @@ int ClpPoolMatrix::transposeTimes2(const ClpSimplex *model,
   double dualTolerance = model->currentDualTolerance();
   // we can't really trust infeasibilities if there is dual error
   // this coding has to mimic coding in checkDualSolution
-  double error = CoinMin(1.0e-2, model->largestDualError());
+  double error = std::min(1.0e-2, model->largestDualError());
   // allow tolerance at least slightly bigger than standard
   dualTolerance = dualTolerance + error;
   bool packed = pi1->packedMode();
@@ -3335,13 +3309,13 @@ int ClpPoolMatrix::transposeTimes2(const ClpSimplex *model,
         if (thisWeight < DEVEX_TRY_NORM) {
           if (referenceIn < 0.0) {
             // steepest
-            thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+            thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
           } else {
             // exact
             thisWeight = referenceIn * pivotSquared;
             if (reference(iColumn))
               thisWeight += 1.0;
-            thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+            thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
           }
         }
         weights[iColumn] = thisWeight;
@@ -3453,13 +3427,13 @@ int ClpPoolMatrix::transposeTimes2(const ClpSimplex *model,
         if (thisWeight < DEVEX_TRY_NORM) {
           if (referenceIn < 0.0) {
             // steepest
-            thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+            thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
           } else {
             // exact
             thisWeight = referenceIn * pivotSquared;
             if (reference(iColumn))
               thisWeight += 1.0;
-            thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+            thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
           }
         }
         weights[iColumn] = thisWeight;

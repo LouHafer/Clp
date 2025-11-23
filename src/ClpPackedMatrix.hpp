@@ -185,11 +185,6 @@ public:
     int column, double multiplier) const;
   /// Allow any parts of a created CoinPackedMatrix to be deleted
   virtual void releasePackedMatrix() const {}
-  /** Given positive integer weights for each row fills in sum of weights
-         for each column (and slack).
-         Returns weights vector
-     */
-  virtual CoinBigIndex *dubiousWeights(const ClpSimplex *model, int *inputWeights) const;
   /// Says whether it can do partial pricing
   virtual bool canDoPartialPricing() const;
   /// Partial pricing
@@ -728,13 +723,13 @@ if (fabs(value) > zeroTolerance) {
   if (thisWeight < DEVEX_TRY_NORM) {
     if (referenceIn < 0.0) {
       // steepest
-      thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+      thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
     } else {
       // exact
       thisWeight = referenceIn * pivotSquared;
       if (reference(iColumn))
         thisWeight += 1.0;
-      thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+      thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
     }
   }
   // out basic or fixed
@@ -799,13 +794,13 @@ column++;
   if (thisWeight < DEVEX_TRY_NORM) {
     if (referenceIn < 0.0) {
       // steepest
-      thisWeight = CoinMax(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
+      thisWeight = std::max(DEVEX_TRY_NORM, DEVEX_ADD_ONE + pivotSquared);
     } else {
       // exact
       thisWeight = referenceIn * pivotSquared;
       if (reference(iColumn))
         thisWeight += 1.0;
-      thisWeight = CoinMax(thisWeight, DEVEX_TRY_NORM);
+      thisWeight = std::max(thisWeight, DEVEX_TRY_NORM);
     }
   }
   // out basic or fixed

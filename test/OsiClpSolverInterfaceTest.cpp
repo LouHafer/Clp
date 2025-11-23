@@ -892,12 +892,17 @@ OsiClpSolverInterfaceUnitTest(const std::string & mpsDir, const std::string & ne
       OSIUNITTEST_ASSERT_ERROR(m.primalPivotResult(colIn,direction,colOut,outStatus,theta,NULL) == 0, {}, "clp", "solve model by hand");
       if (OsiUnitTest::verbosity >= 1)
         printf("out %d, direction %d theta %g\n", colOut,outStatus,theta);
+#if 0
       if (colIn!=colOut) {
         OSIUNITTEST_ASSERT_ERROR(mm->pivot(colIn,colOut,outStatus) >= 0, {}, "clp", "solve model by hand");
       } else {
         // bound flip (so pivot does not make sense)
         OSIUNITTEST_ASSERT_ERROR(mm->primalPivotResult(colIn,direction,colOut,outStatus,theta,NULL) == 0, {}, "clp", "solve model by hand");
       }
+#else
+      // always do primalPivotResult as pivot does not unpack incoming
+      OSIUNITTEST_ASSERT_ERROR(mm->primalPivotResult(colIn,direction,colOut,outStatus,theta,NULL) == 0, {}, "clp", "solve model by hand");
+#endif
       numberIterations++;
     }
     delete mm;
@@ -979,7 +984,7 @@ OsiClpSolverInterfaceUnitTest(const std::string & mpsDir, const std::string & ne
           assert (dualsNow[i]<1.0e-4);
           if (duals[i]>1.0e-8) {
             if (dualsNow[i]+best*duals[i]>0.0) {
-              best = CoinMax(-dualsNow[i]/duals[i],0.0);
+              best = std::max(-dualsNow[i]/duals[i],0.0);
               direction=-1;
               colIn=-i-1;
             }
@@ -994,7 +999,7 @@ OsiClpSolverInterfaceUnitTest(const std::string & mpsDir, const std::string & ne
             assert (djsNow[i]>-1.0e-4);
             if (djs[i]<-1.0e-8) {
               if (djsNow[i]+best*djs[i]<0.0) {
-                best = CoinMax(-djsNow[i]/djs[i],0.0);
+                best = std::max(-djsNow[i]/djs[i],0.0);
                 direction=1;
                 colIn=i;
               }
@@ -1003,7 +1008,7 @@ OsiClpSolverInterfaceUnitTest(const std::string & mpsDir, const std::string & ne
             assert (djsNow[i]<1.0e-4);
             if (djs[i]>1.0e-8) {
               if (djsNow[i]+best*djs[i]>0.0) {
-                best = CoinMax(-djsNow[i]/djs[i],0.0);
+                best = std::max(-djsNow[i]/djs[i],0.0);
                 direction=-1;
                 colIn=i;
               }

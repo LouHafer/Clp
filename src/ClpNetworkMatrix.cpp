@@ -55,10 +55,10 @@ ClpNetworkMatrix::ClpNetworkMatrix(int numberColumns, const int *head,
   CoinBigIndex j = 0;
   for (iColumn = 0; iColumn < numberColumns_; iColumn++, j += 2) {
     int iRow = head[iColumn];
-    numberRows_ = CoinMax(numberRows_, iRow);
+    numberRows_ = std::max(numberRows_, iRow);
     indices_[j] = iRow;
     iRow = tail[iColumn];
-    numberRows_ = CoinMax(numberRows_, iRow);
+    numberRows_ = std::max(numberRows_, iRow);
     indices_[j + 1] = iRow;
   }
   numberRows_++;
@@ -121,12 +121,12 @@ ClpNetworkMatrix::ClpNetworkMatrix(const CoinPackedMatrix &rhs)
       if (fabs(elementByColumn[k] - 1.0) < 1.0e-10) {
         indices_[j] = -1;
         iRow = row[k];
-        numberRows_ = CoinMax(numberRows_, iRow);
+        numberRows_ = std::max(numberRows_, iRow);
         indices_[j + 1] = iRow;
       } else if (fabs(elementByColumn[k] + 1.0) < 1.0e-10) {
         indices_[j + 1] = -1;
         iRow = row[k];
-        numberRows_ = CoinMax(numberRows_, iRow);
+        numberRows_ = std::max(numberRows_, iRow);
         indices_[j] = iRow;
       } else {
         goodNetwork = 0; // not a network
@@ -137,10 +137,10 @@ ClpNetworkMatrix::ClpNetworkMatrix(const CoinPackedMatrix &rhs)
       if (fabs(elementByColumn[k] - 1.0) < 1.0e-10) {
         if (fabs(elementByColumn[k + 1] + 1.0) < 1.0e-10) {
           iRow = row[k];
-          numberRows_ = CoinMax(numberRows_, iRow);
+          numberRows_ = std::max(numberRows_, iRow);
           indices_[j + 1] = iRow;
           iRow = row[k + 1];
-          numberRows_ = CoinMax(numberRows_, iRow);
+          numberRows_ = std::max(numberRows_, iRow);
           indices_[j] = iRow;
         } else {
           goodNetwork = 0; // not a network
@@ -148,10 +148,10 @@ ClpNetworkMatrix::ClpNetworkMatrix(const CoinPackedMatrix &rhs)
       } else if (fabs(elementByColumn[k] + 1.0) < 1.0e-10) {
         if (fabs(elementByColumn[k + 1] - 1.0) < 1.0e-10) {
           iRow = row[k];
-          numberRows_ = CoinMax(numberRows_, iRow);
+          numberRows_ = std::max(numberRows_, iRow);
           indices_[j] = iRow;
           iRow = row[k + 1];
-          numberRows_ = CoinMax(numberRows_, iRow);
+          numberRows_ = std::max(numberRows_, iRow);
           indices_[j + 1] = iRow;
         } else {
           goodNetwork = 0; // not a network
@@ -817,36 +817,6 @@ void ClpNetworkMatrix::deleteRows(const int numDel, const int *indDel)
   delete[] which;
   numberRows_ = newNumber;
 }
-/* Given positive integer weights for each row fills in sum of weights
-   for each column (and slack).
-   Returns weights vector
-*/
-CoinBigIndex *
-ClpNetworkMatrix::dubiousWeights(const ClpSimplex *model, int *inputWeights) const
-{
-  int numberRows = model->numberRows();
-  int numberColumns = model->numberColumns();
-  int number = numberRows + numberColumns;
-  CoinBigIndex *weights = new CoinBigIndex[number];
-  int i;
-  for (i = 0; i < numberColumns; i++) {
-    CoinBigIndex j = i << 1;
-    CoinBigIndex count = 0;
-    int iRowM = indices_[j];
-    int iRowP = indices_[j + 1];
-    if (iRowM >= 0) {
-      count += inputWeights[iRowM];
-    }
-    if (iRowP >= 0) {
-      count += inputWeights[iRowP];
-    }
-    weights[i] = count;
-  }
-  for (i = 0; i < numberRows; i++) {
-    weights[i + numberColumns] = inputWeights[i];
-  }
-  return weights;
-}
 /* Returns largest and smallest elements of both signs.
    Largest refers to largest absolute value.
 */
@@ -870,7 +840,7 @@ void ClpNetworkMatrix::partialPricing(ClpSimplex *model, double startFraction, d
   numberWanted = currentWanted_;
   int j;
   int start = static_cast< int >(startFraction * numberColumns_);
-  int end = CoinMin(static_cast< int >(endFraction * numberColumns_ + 1), numberColumns_);
+  int end = std::min(static_cast< int >(endFraction * numberColumns_ + 1), numberColumns_);
   double tolerance = model->currentDualTolerance();
   double *reducedCost = model->djRegion();
   const double *duals = model->dualRowSolution();

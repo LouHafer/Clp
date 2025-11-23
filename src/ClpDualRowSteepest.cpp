@@ -25,7 +25,6 @@ ClpDualRowSteepest::ClpDualRowSteepest(int mode)
   , infeasible_(NULL)
   , alternateWeights_(NULL)
   , savedWeights_(NULL)
-  , dubiousWeights_(NULL)
 {
   type_ = 2 + 64 * mode;
 }
@@ -43,7 +42,7 @@ ClpDualRowSteepest::ClpDualRowSteepest(const ClpDualRowSteepest &rhs)
   if ((model_ && model_->whatsChanged() & 1) != 0) {
     int number = model_->numberRows();
     if (rhs.savedWeights_)
-      number = CoinMin(number, rhs.savedWeights_->capacity());
+      number = std::min(number, rhs.savedWeights_->capacity());
     if (rhs.infeasible_) {
       infeasible_ = new CoinIndexedVector(rhs.infeasible_);
     } else {
@@ -65,20 +64,11 @@ ClpDualRowSteepest::ClpDualRowSteepest(const ClpDualRowSteepest &rhs)
     } else {
       savedWeights_ = NULL;
     }
-    if (rhs.dubiousWeights_) {
-      assert(model_);
-      int number = model_->numberRows();
-      dubiousWeights_ = new int[number];
-      ClpDisjointCopyN(rhs.dubiousWeights_, number, dubiousWeights_);
-    } else {
-      dubiousWeights_ = NULL;
-    }
   } else {
     infeasible_ = NULL;
     weights_ = NULL;
     alternateWeights_ = NULL;
     savedWeights_ = NULL;
-    dubiousWeights_ = NULL;
   }
 }
 
@@ -88,7 +78,6 @@ ClpDualRowSteepest::ClpDualRowSteepest(const ClpDualRowSteepest &rhs)
 ClpDualRowSteepest::~ClpDualRowSteepest()
 {
   delete[] weights_;
-  delete[] dubiousWeights_;
   delete infeasible_;
   delete alternateWeights_;
   delete savedWeights_;
@@ -107,14 +96,13 @@ ClpDualRowSteepest::operator=(const ClpDualRowSteepest &rhs)
     persistence_ = rhs.persistence_;
     model_ = rhs.model_;
     delete[] weights_;
-    delete[] dubiousWeights_;
     delete infeasible_;
     delete alternateWeights_;
     delete savedWeights_;
     assert(model_);
     int number = model_->numberRows();
     if (rhs.savedWeights_)
-      number = CoinMin(number, rhs.savedWeights_->capacity());
+      number = std::min(number, rhs.savedWeights_->capacity());
     if (rhs.infeasible_ != NULL) {
       infeasible_ = new CoinIndexedVector(rhs.infeasible_);
     } else {
@@ -136,14 +124,6 @@ ClpDualRowSteepest::operator=(const ClpDualRowSteepest &rhs)
     } else {
       savedWeights_ = NULL;
     }
-    if (rhs.dubiousWeights_) {
-      assert(model_);
-      int number = model_->numberRows();
-      dubiousWeights_ = new int[number];
-      ClpDisjointCopyN(rhs.dubiousWeights_, number, dubiousWeights_);
-    } else {
-      dubiousWeights_ = NULL;
-    }
   }
   return *this;
 }
@@ -158,7 +138,7 @@ void ClpDualRowSteepest::fill(const ClpDualRowSteepest &rhs)
   assert(model_);
   int number = model_->numberRows();
   if (rhs.savedWeights_)
-    number = CoinMin(number, rhs.savedWeights_->capacity());
+    number = std::min(number, rhs.savedWeights_->capacity());
   if (rhs.infeasible_ != NULL) {
     if (!infeasible_)
       infeasible_ = new CoinIndexedVector(rhs.infeasible_);
@@ -194,16 +174,6 @@ void ClpDualRowSteepest::fill(const ClpDualRowSteepest &rhs)
     delete savedWeights_;
     savedWeights_ = NULL;
   }
-  if (rhs.dubiousWeights_) {
-    assert(model_);
-    int number = model_->numberRows();
-    if (!dubiousWeights_)
-      dubiousWeights_ = new int[number];
-    ClpDisjointCopyN(rhs.dubiousWeights_, number, dubiousWeights_);
-  } else {
-    delete[] dubiousWeights_;
-    dubiousWeights_ = NULL;
-  }
 }
 // Returns pivot row, -1 if none
 int ClpDualRowSteepest::pivotRow()
@@ -221,11 +191,11 @@ int ClpDualRowSteepest::pivotRow()
   double tolerance = model_->currentPrimalTolerance();
   // we can't really trust infeasibilities if there is primal error
   // this coding has to mimic coding in checkPrimalSolution
-  double error = CoinMin(1.0e-2, model_->largestPrimalError());
+  double error = std::min(1.0e-2, model_->largestPrimalError());
   // allow tolerance at least slightly bigger than standard
   tolerance = tolerance + error;
   // But cap
-  tolerance = CoinMin(1000.0, tolerance);
+  tolerance = std::min(1000.0, tolerance);
   tolerance *= tolerance; // as we are using squares
   bool toleranceChanged = false;
   double *solution = model_->solutionRegion();
@@ -275,7 +245,7 @@ int ClpDualRowSteepest::pivotRow()
   if (model_->numberIterations() < model_->lastBadIteration() + 200) {
     // we can't really trust infeasibilities if there is dual error
     if (model_->largestDualError() > model_->largestPrimalError()) {
-      tolerance *= CoinMin(model_->largestDualError() / model_->largestPrimalError(), 1000.0);
+      tolerance *= std::min(model_->largestDualError() / model_->largestPrimalError(), 1000.0);
       toleranceChanged = true;
     }
   }
@@ -283,19 +253,19 @@ int ClpDualRowSteepest::pivotRow()
   if (mode_ < 2) {
     numberWanted = number + 1;
   } else if (mode_ == 2) {
-    numberWanted = CoinMax(2000, number / 8);
+    numberWanted = std::max(2000, number / 8);
   } else {
     int numberElements = model_->factorization()->numberElements();
     double ratio = static_cast< double >(numberElements) / static_cast< double >(model_->numberRows());
-    numberWanted = CoinMax(2000, number / 8);
+    numberWanted = std::max(2000, number / 8);
     if (ratio < 1.0) {
-      numberWanted = CoinMax(2000, number / 20);
+      numberWanted = std::max(2000, number / 20);
     } else if (ratio > 10.0) {
       ratio = number * (ratio / 80.0);
       if (ratio > number)
         numberWanted = number + 1;
       else
-        numberWanted = CoinMax(2000, static_cast< int >(ratio));
+        numberWanted = std::max(2000, static_cast< int >(ratio));
     }
   }
   if (model_->largestPrimalError() > 1.0e-3)
@@ -324,12 +294,9 @@ int ClpDualRowSteepest::pivotRow()
             value *= 2.0;
         }
 #endif
-        double weight = CoinMin(weights_[iRow], 1.0e50);
-        //largestWeight = CoinMax(largestWeight,weight);
-        //smallestWeight = CoinMin(smallestWeight,weight);
-        //double dubious = dubiousWeights_[iRow];
-        //weight *= dubious;
-        //if (value>2.0*largest*weight||(value>0.5*largest*weight&&value*largestWeight>dubious*largest*weight)) {
+        double weight = std::min(weights_[iRow], 1.0e50);
+        //largestWeight = std::max(largestWeight,weight);
+        //smallestWeight = std::min(smallestWeight,weight);
         if (value > largest * weight) {
           // make last pivot row last resort choice
           if (iRow == lastPivotRow) {
@@ -347,7 +314,7 @@ int ClpDualRowSteepest::pivotRow()
               value2 = solution[iSequence] - upper[iSequence];
             else if (solution[iSequence] < lower[iSequence] - tolerance)
               value2 = solution[iSequence] - lower[iSequence];
-            assert(fabs(value2 * value2 - infeas[iRow]) < 1.0e-8 * CoinMin(value2 * value2, infeas[iRow]));
+            assert(fabs(value2 * value2 - infeas[iRow]) < 1.0e-8 * std::min(value2 * value2, infeas[iRow]));
 #endif
             if (solution[iSequence] > upper[iSequence] + tolerance || solution[iSequence] < lower[iSequence] - tolerance) {
               chosenRow = iRow;
@@ -436,7 +403,7 @@ ClpDualRowSteepest::updateWeights(CoinIndexedVector *input,
         array[iRow] = 0.0;
       }
       alternateWeights_->setNumElements(0);
-      double w = CoinMax(weights_[i], value) * .1;
+      double w = std::max(weights_[i], value) * .1;
       if (fabs(weights_[i] - value) > w) {
         printf("%d old %g, true %g\n", i, weights_[i], value);
         weights_[i] = value; // to reduce printout
@@ -833,8 +800,6 @@ void ClpDualRowSteepest::saveWeights(ClpSimplex *model, int mode)
         // size has changed - clear everything
         delete[] weights_;
         weights_ = NULL;
-        delete[] dubiousWeights_;
-        dubiousWeights_ = NULL;
         delete infeasible_;
         infeasible_ = NULL;
         delete alternateWeights_;
@@ -990,10 +955,6 @@ void ClpDualRowSteepest::saveWeights(ClpSimplex *model, int mode)
     }
   }
   if (mode >= 2) {
-    // Get dubious weights
-    //if (!dubiousWeights_)
-    //dubiousWeights_=new int[numberRows];
-    //model_->factorization()->getWeights(dubiousWeights_);
     infeasible_->clear();
     int iRow;
     const int *pivotVariable = model_->pivotVariable();
@@ -1095,8 +1056,6 @@ void ClpDualRowSteepest::clearArrays()
   if (persistence_ == normal) {
     delete[] weights_;
     weights_ = NULL;
-    delete[] dubiousWeights_;
-    dubiousWeights_ = NULL;
     delete infeasible_;
     infeasible_ = NULL;
     delete alternateWeights_;
@@ -1114,11 +1073,11 @@ bool ClpDualRowSteepest::looksOptimal() const
   double tolerance = model_->currentPrimalTolerance();
   // we can't really trust infeasibilities if there is primal error
   // this coding has to mimic coding in checkPrimalSolution
-  double error = CoinMin(1.0e-2, model_->largestPrimalError());
+  double error = std::min(1.0e-2, model_->largestPrimalError());
   // allow tolerance at least slightly bigger than standard
   tolerance = tolerance + error;
   // But cap
-  tolerance = CoinMin(1000.0, tolerance);
+  tolerance = std::min(1000.0, tolerance);
   int numberRows = model_->numberRows();
   int numberInfeasible = 0;
   for (iRow = 0; iRow < numberRows; iRow++) {

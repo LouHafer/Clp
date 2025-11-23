@@ -273,7 +273,7 @@ int ClpPredictorCorrector::solve()
     //if (saveIteration+10<numberIterations_&&
     //complementarityGap_*2.0<historyInfeasibility_[0])
     //saveIteration=-1;
-    lastStep = CoinMin(actualPrimalStep_, actualDualStep_);
+    lastStep = std::min(actualPrimalStep_, actualDualStep_);
     // See if not getting anywhere
     if (numberIterations_>50) {
       if (lastStep<1.0e-18) {
@@ -306,15 +306,15 @@ int ClpPredictorCorrector::solve()
     CoinWorkDouble lastGood = bestObjectiveGap;
     if (gonePrimalFeasible_ && goneDualFeasible_) {
       CoinWorkDouble largestObjective;
-      if (CoinAbs(primalObjective_) > CoinAbs(dualObjective_)) {
-        largestObjective = CoinAbs(primalObjective_);
+      if (std::abs(primalObjective_) > std::abs(dualObjective_)) {
+        largestObjective = std::abs(primalObjective_);
       } else {
-        largestObjective = CoinAbs(dualObjective_);
+        largestObjective = std::abs(dualObjective_);
       }
       if (largestObjective < 1.0) {
         largestObjective = 1.0;
       }
-      gapO = CoinAbs(primalObjective_ - dualObjective_) / largestObjective;
+      gapO = std::abs(primalObjective_ - dualObjective_) / largestObjective;
       handler_->message(CLP_BARRIER_OBJECTIVE_GAP, messages_)
         << static_cast< double >(gapO)
         << CoinMessageEol;
@@ -356,7 +356,7 @@ int ClpPredictorCorrector::solve()
       }
       //std::cout <<"could stop"<<std::endl;
       //gapO=0.0;
-      if (CoinAbs(primalObjective_ - dualObjective_) < dualTolerance()) {
+      if (std::abs(primalObjective_ - dualObjective_) < dualTolerance()) {
         gapO = 0.0;
       }
     } else {
@@ -590,9 +590,9 @@ int ClpPredictorCorrector::solve()
     int bestPhase = 0;
     CoinWorkDouble bestNextGap = nextGap;
     // ?
-    bestNextGap = CoinMax(nextGap, 0.8 * complementarityGap_);
+    bestNextGap = std::max(nextGap, 0.8 * complementarityGap_);
     if (quadraticObj)
-      bestNextGap = CoinMax(nextGap, 0.99 * complementarityGap_);
+      bestNextGap = std::max(nextGap, 0.99 * complementarityGap_);
     if (complementarityGap_ > 1.0e-4 * numberComplementarityPairs_) {
       //std::cout <<"predicted duality gap "<<nextGap<<std::endl;
       CoinWorkDouble part1 = nextGap / numberComplementarityPairs_;
@@ -729,7 +729,7 @@ int ClpPredictorCorrector::solve()
 #ifdef HALVE
       int nHalve = 0;
       // relax test
-      bestNextGap = CoinMax(bestNextGap, 0.9 * complementarityGap_);
+      bestNextGap = std::max(bestNextGap, 0.9 * complementarityGap_);
       while (!goodMove) {
         mu_ = saveMu;
         actualPrimalStep_ = savePrimalStep;
@@ -1025,15 +1025,15 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
   if (numberIterations_ < 80 || !gonePrimalFeasible_)
     hitTolerance = COIN_DBL_MAX;
   else
-    hitTolerance = CoinMax(1.0e3, 1.0e-3 * objectiveNorm_);
+    hitTolerance = std::max(1.0e3, 1.0e-3 * objectiveNorm_);
   int iColumn;
   //printf("dual value %g\n",dual_[0]);
   //printf("     X     dX      lS     dlS     uS     dUs    dj    Z dZ     t   dT\n");
   for (iColumn = 0; iColumn < numberTotal; iColumn++) {
     if (!flagged(iColumn)) {
       CoinWorkDouble directionElement = deltaX_[iColumn];
-      if (directionNorm < CoinAbs(directionElement)) {
-        directionNorm = CoinAbs(directionElement);
+      if (directionNorm < std::abs(directionElement)) {
+        directionNorm = std::abs(directionElement);
       }
       if (lowerBound(iColumn)) {
         CoinWorkDouble delta = -deltaSL_[iColumn];
@@ -1132,7 +1132,7 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
 #endif
   if (quadraticObj) {
     // Use smaller unless very small
-    CoinWorkDouble smallerStep = CoinMin(actualDualStep_, actualPrimalStep_);
+    CoinWorkDouble smallerStep = std::min(actualDualStep_, actualPrimalStep_);
     if (smallerStep > 0.0001) {
       actualDualStep_ = smallerStep;
       actualPrimalStep_ = smallerStep;
@@ -1246,7 +1246,7 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
       multiplier *= 0.01;
       multiplier = 1.0;
       CoinWorkDouble currentInf = multiplier * CoinSqrt(cq);
-      CoinWorkDouble nextInf = multiplier * CoinSqrt(CoinMax(cq + step * bq + step * step * aq, 0.0));
+      CoinWorkDouble nextInf = multiplier * CoinSqrt(std::max(cq + step * bq + step * step * aq, 0.0));
       CoinWorkDouble allowedIncrease = 1.4;
 #ifdef SOME_DEBUG
       printf("lin %g %g %g -> %g\n", a, b, c,
@@ -1262,20 +1262,20 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
           directionNorm = -1.0;
       }
       if ((phase == 1 || phase == 2 || phase == 0 || phase == 3) && nextInf > 0.1 * complementarityGap_ && nextInf > currentInf * allowedIncrease) {
-        //cq = CoinMax(cq,10.0);
+        //cq = std::max(cq,10.0);
         // convert to (x+q)*(x+q) = w
         CoinWorkDouble q = bq / (1.0 * aq);
-        CoinWorkDouble w = CoinMax(q * q + (cq / aq) * (allowedIncrease - 1.0), 0.0);
+        CoinWorkDouble w = std::max(q * q + (cq / aq) * (allowedIncrease - 1.0), 0.0);
         w = CoinSqrt(w);
         CoinWorkDouble stepX = w - q;
         step = stepX;
-        nextInf = multiplier * CoinSqrt(CoinMax(cq + step * bq + step * step * aq, 0.0));
+        nextInf = multiplier * CoinSqrt(std::max(cq + step * bq + step * step * aq, 0.0));
 #ifdef SOME_DEBUG
         printf("with step of %g dualInf is %g\n",
           step, nextInf);
 #endif
-        actualDualStep_ = CoinMin(step, actualDualStep_);
-        actualPrimalStep_ = CoinMin(step, actualPrimalStep_);
+        actualDualStep_ = std::min(step, actualDualStep_);
+        actualPrimalStep_ = std::min(step, actualPrimalStep_);
       }
     }
   } else {
@@ -1313,7 +1313,7 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
     // ? We want to minimize complementarityGap;
     // maybe use inf and do line search
     // To check see if matches at current step
-    CoinWorkDouble step = CoinMin(actualPrimalStep_, actualDualStep_);
+    CoinWorkDouble step = std::min(actualPrimalStep_, actualDualStep_);
     CoinWorkDouble next = c + b * step + a * step * step;
 #ifdef SOME_DEBUG
     printf("lin %g %g %g -> %g\n", a, b, c,
@@ -1354,7 +1354,7 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
     step = actualPrimalStep_;
     CoinWorkDouble next2 = c + b * step + a * step * step;
     if (next2 > next) {
-      actualPrimalStep_ = CoinMin(actualPrimalStep_, actualDualStep_);
+      actualPrimalStep_ = std::min(actualPrimalStep_, actualDualStep_);
       actualDualStep_ = actualPrimalStep_;
     }
 #ifdef SOME_DEBUG
@@ -1420,8 +1420,8 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
           CoinWorkDouble dualValue = zVec_[iColumn] + actualDualStep_ * deltaZ_[iColumn];
           CoinWorkDouble primalValue = lowerSlack_[iColumn] + actualPrimalStep_ * change;
           CoinWorkDouble gapProduct = dualValue * primalValue;
-          largestL = CoinMax(largestL, gapProduct);
-          smallestL = CoinMin(smallestL, gapProduct);
+          largestL = std::max(largestL, gapProduct);
+          smallestL = std::min(smallestL, gapProduct);
           nL++;
           sumL += gapProduct;
         }
@@ -1430,8 +1430,8 @@ CoinWorkDouble ClpPredictorCorrector::findStepLength(int phase)
           CoinWorkDouble dualValue = wVec_[iColumn] + actualDualStep_ * deltaW_[iColumn];
           CoinWorkDouble primalValue = upperSlack_[iColumn] + actualPrimalStep_ * change;
           CoinWorkDouble gapProduct = dualValue * primalValue;
-          largestU = CoinMax(largestU, gapProduct);
-          smallestU = CoinMin(smallestU, gapProduct);
+          largestU = std::max(largestU, gapProduct);
+          smallestU = std::min(smallestU, gapProduct);
           nU++;
           sumU += gapProduct;
         }
@@ -1605,7 +1605,7 @@ CoinWorkDouble ClpPredictorCorrector::findDirectionVector(const int phase)
     CoinWorkDouble lastError = relativeError;
     goodSolve = true;
     CoinWorkDouble maximumRHS;
-    maximumRHS = CoinMax(maximumAbsElement(deltaY_, numberRows_), 1.0e-12);
+    maximumRHS = std::max(maximumAbsElement(deltaY_, numberRows_), 1.0e-12);
     if (!numberTries)
       saveMaximum = maximumRHS;
     if (cholesky_->type() < 20) {
@@ -1681,19 +1681,19 @@ CoinWorkDouble ClpPredictorCorrector::findDirectionVector(const int phase)
         CoinWorkDouble oldValue = errorRegion_[iRow];
         //severity of errors depend on signs
         //**later                                                             */
-        if (CoinAbs(newValue) > maximumRHSChange) {
-          maximumRHSChange = CoinAbs(newValue);
+        if (std::abs(newValue) > maximumRHSChange) {
+          maximumRHSChange = std::abs(newValue);
         }
         CoinWorkDouble result = newValue + oldValue;
-        if (CoinAbs(result) > maximumRHSError) {
-          maximumRHSError = CoinAbs(result);
+        if (std::abs(result) > maximumRHSError) {
+          maximumRHSError = std::abs(result);
         }
         newError[iRow] = result;
       } else {
         CoinWorkDouble newValue = newError[iRow];
         CoinWorkDouble oldValue = errorRegion_[iRow];
-        if (CoinAbs(newValue) > maximumRHSChange) {
-          maximumRHSChange = CoinAbs(newValue);
+        if (std::abs(newValue) > maximumRHSChange) {
+          maximumRHSChange = std::abs(newValue);
         }
         CoinWorkDouble result = newValue + oldValue;
         newError[iRow] = result;
@@ -1843,21 +1843,21 @@ CoinWorkDouble ClpPredictorCorrector::findDirectionVector(const int phase)
      quadraticDjs(check, deltaX_, -1.0);
      for (iColumn = 0; iColumn < numberTotal; iColumn++) {
           check[iColumn] += deltaZ_[iColumn] - deltaW_[iColumn];
-          if (CoinAbs(check[iColumn] - rhsC_[iColumn]) > 1.0e-3)
+          if (std::abs(check[iColumn] - rhsC_[iColumn]) > 1.0e-3)
                printf("rhsC %d %g %g\n", iColumn, check[iColumn], rhsC_[iColumn]);
      }
      // Check out rhsZ_
      for (iColumn = 0; iColumn < numberTotal; iColumn++) {
           check[iColumn] += lowerSlack_[iColumn] * deltaZ_[iColumn] +
                             zVec_[iColumn] * deltaSL_[iColumn];
-          if (CoinAbs(check[iColumn] - rhsZ_[iColumn]) > 1.0e-3)
+          if (std::abs(check[iColumn] - rhsZ_[iColumn]) > 1.0e-3)
                printf("rhsZ %d %g %g\n", iColumn, check[iColumn], rhsZ_[iColumn]);
      }
      // Check out rhsW_
      for (iColumn = 0; iColumn < numberTotal; iColumn++) {
           check[iColumn] += upperSlack_[iColumn] * deltaW_[iColumn] +
                             wVec_[iColumn] * deltaSU_[iColumn];
-          if (CoinAbs(check[iColumn] - rhsW_[iColumn]) > 1.0e-3)
+          if (std::abs(check[iColumn] - rhsW_[iColumn]) > 1.0e-3)
                printf("rhsW %d %g %g\n", iColumn, check[iColumn], rhsW_[iColumn]);
      }
      delete [] check;
@@ -1932,7 +1932,7 @@ int ClpPredictorCorrector::createSolution()
             int jColumn = columnQuadratic[j];
             CoinWorkDouble scaleJ = columnScale_[jColumn];
             quadraticElement[j] *= scaleI * scaleJ;
-            objectiveNorm_ = CoinMax(objectiveNorm_, CoinAbs(quadraticElement[j]));
+            objectiveNorm_ = std::max(objectiveNorm_, std::abs(quadraticElement[j]));
           }
         }
       } else {
@@ -1941,7 +1941,7 @@ int ClpPredictorCorrector::createSolution()
           for (CoinBigIndex j = columnQuadraticStart[iColumn];
                j < columnQuadraticStart[iColumn] + columnQuadraticLength[iColumn]; j++) {
             quadraticElement[j] *= scale;
-            objectiveNorm_ = CoinMax(objectiveNorm_, CoinAbs(quadraticElement[j]));
+            objectiveNorm_ = std::max(objectiveNorm_, std::abs(quadraticElement[j]));
           }
         }
       }
@@ -2062,7 +2062,7 @@ int ClpPredictorCorrector::createSolution()
   if (rhsNorm_ * 1.0e-2 > initialValue) {
     initialValue = rhsNorm_ * 1.0e-2;
   }
-  //initialValue = CoinMax(1.0,rhsNorm_);
+  //initialValue = std::max(1.0,rhsNorm_);
   CoinWorkDouble smallestBoundDifference = COIN_DBL_MAX;
   CoinWorkDouble *fakeSolution = deltaX_;
   for (iColumn = 0; iColumn < numberTotal; iColumn++) {
@@ -2089,8 +2089,8 @@ int ClpPredictorCorrector::createSolution()
   CoinWorkDouble safeFree = 1.0e-1 * initialValue;
   //printf("normal safe dual value of %g, primal value of %g\n",
   // safeObjectiveValue,initialValue);
-  //safeObjectiveValue=CoinMax(2.0,1.0e-1*safeObjectiveValue);
-  //initialValue=CoinMax(100.0,1.0e-1*initialValue);;
+  //safeObjectiveValue=std::max(2.0,1.0e-1*safeObjectiveValue);
+  //initialValue=std::max(100.0,1.0e-1*initialValue);;
   //printf("temp safe dual value of %g, primal value of %g\n",
   // safeObjectiveValue,initialValue);
   CoinWorkDouble zwLarge = 1.0e2 * initialValue;
@@ -2171,7 +2171,7 @@ int ClpPredictorCorrector::createSolution()
   }
   solutionNorm_ = maximumAbsElement(solution_, numberTotal);
   // Set bounds and do dj including quadratic
-  largeGap = CoinMax(1.0e7, 1.02 * solutionNorm_);
+  largeGap = std::max(1.0e7, 1.02 * solutionNorm_);
   CoinPackedMatrix *quadratic = NULL;
   const int *columnQuadratic = NULL;
   const CoinBigIndex *columnQuadraticStart = NULL;
@@ -2206,21 +2206,21 @@ int ClpPredictorCorrector::createSolution()
           CoinWorkDouble elementValue = quadraticElement[j];
           reducedCost += valueJ * elementValue;
         }
-        quadraticNorm = CoinMax(quadraticNorm, CoinAbs(reducedCost));
+        quadraticNorm = std::max(quadraticNorm, std::abs(reducedCost));
       }
       dj_[iColumn] = reducedCost;
       if (primalValue > lowerValue + largeGap && primalValue < upperValue - largeGap) {
         clearFixedOrFree(iColumn);
         setLowerBound(iColumn);
         setUpperBound(iColumn);
-        lowerValue = CoinMax(lowerValue, primalValue - largeGap);
-        upperValue = CoinMin(upperValue, primalValue + largeGap);
+        lowerValue = std::max(lowerValue, primalValue - largeGap);
+        upperValue = std::min(upperValue, primalValue + largeGap);
         lower_[iColumn] = lowerValue;
         upper_[iColumn] = upperValue;
       }
     }
   }
-  safeObjectiveValue = CoinMax(safeObjectiveValue, quadraticNorm);
+  safeObjectiveValue = std::max(safeObjectiveValue, quadraticNorm);
   for (iColumn = 0; iColumn < numberTotal; iColumn++) {
     if (!flagged(iColumn)) {
       CoinWorkDouble primalValue = solution_[iColumn];
@@ -2263,12 +2263,12 @@ int ClpPredictorCorrector::createSolution()
           //modify if long long way away from bound
           if (reducedCost >= 0.0) {
             zVec_[iColumn] = reducedCost + safeObjectiveValue * ratioZ;
-            zVec_[iColumn] = CoinMax(reducedCost, safeObjectiveValue * ratioZ);
+            zVec_[iColumn] = std::max(reducedCost, safeObjectiveValue * ratioZ);
             wVec_[iColumn] = safeObjectiveValue * ratioT;
           } else {
             zVec_[iColumn] = safeObjectiveValue * ratioZ;
             wVec_[iColumn] = -reducedCost + safeObjectiveValue * ratioT;
-            wVec_[iColumn] = CoinMax(-reducedCost, safeObjectiveValue * ratioT);
+            wVec_[iColumn] = std::max(-reducedCost, safeObjectiveValue * ratioT);
           }
           CoinWorkDouble gammaTerm = gamma2;
           if (primalR_)
@@ -2291,7 +2291,7 @@ int ClpPredictorCorrector::createSolution()
           }
           if (reducedCost >= 0.0) {
             zVec_[iColumn] = reducedCost + safeObjectiveValue * ratioZ;
-            zVec_[iColumn] = CoinMax(reducedCost, safeObjectiveValue * ratioZ);
+            zVec_[iColumn] = std::max(reducedCost, safeObjectiveValue * ratioZ);
             wVec_[iColumn] = 0.0;
           } else {
             zVec_[iColumn] = safeObjectiveValue * ratioZ;
@@ -2324,7 +2324,7 @@ int ClpPredictorCorrector::createSolution()
           } else {
             zVec_[iColumn] = 0.0;
             wVec_[iColumn] = -reducedCost + safeObjectiveValue * ratioT;
-            wVec_[iColumn] = CoinMax(-reducedCost, safeObjectiveValue * ratioT);
+            wVec_[iColumn] = std::max(-reducedCost, safeObjectiveValue * ratioT);
           }
           CoinWorkDouble gammaTerm = gamma2;
           if (primalR_)
@@ -2339,14 +2339,14 @@ int ClpPredictorCorrector::createSolution()
 #if 0
      if (solution_[0] > 0.0) {
           for (int i = 0; i < numberTotal; i++)
-               printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, CoinAbs(solution_[i]),
-                      diagonal_[i], CoinAbs(dj_[i]),
+               printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, std::abs(solution_[i]),
+                      diagonal_[i], std::abs(dj_[i]),
                       lowerSlack_[i], zVec_[i],
                       upperSlack_[i], wVec_[i]);
      } else {
           for (int i = 0; i < numberTotal; i++)
-               printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, CoinAbs(solution_[i]),
-                      diagonal_[i], CoinAbs(dj_[i]),
+               printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, std::abs(solution_[i]),
+                      diagonal_[i], std::abs(dj_[i]),
                       upperSlack_[i], wVec_[i],
                       lowerSlack_[i], zVec_[i] );
      }
@@ -2414,7 +2414,7 @@ CoinWorkDouble ClpPredictorCorrector::complementarityGap(int &numberComplementar
         if (gapProduct > largestGap) {
           largestGap = gapProduct;
         }
-        smallestGap = CoinMin(smallestGap, gapProduct);
+        smallestGap = std::min(smallestGap, gapProduct);
         //if (dualValue > dualTolerance && primalValue > primalTolerance) {
         //  toleranceGap += dualValue * primalValue;
         //}
@@ -2512,23 +2512,23 @@ void ClpPredictorCorrector::setupForSolve(const int phase)
           rhsC_[iColumn] += primalR_[iColumn] * solution_[iColumn];
         if (lowerBound(iColumn)) {
           rhsZ_[iColumn] = -zVec_[iColumn] * (lowerSlack_[iColumn] + extra);
-          rhsL_[iColumn] = CoinMax(0.0, (lower_[iColumn] + lowerSlack_[iColumn]) - solution_[iColumn]);
+          rhsL_[iColumn] = std::max(0.0, (lower_[iColumn] + lowerSlack_[iColumn]) - solution_[iColumn]);
         }
         if (upperBound(iColumn)) {
           rhsW_[iColumn] = -wVec_[iColumn] * (upperSlack_[iColumn] + extra);
-          rhsU_[iColumn] = CoinMin(0.0, (upper_[iColumn] - upperSlack_[iColumn]) - solution_[iColumn]);
+          rhsU_[iColumn] = std::min(0.0, (upper_[iColumn] - upperSlack_[iColumn]) - solution_[iColumn]);
         }
       }
     }
 #if 0
           for (int i = 0; i < 3; i++) {
-               if (!CoinAbs(rhsZ_[i]))
+               if (!std::abs(rhsZ_[i]))
                     rhsZ_[i] = 0.0;
-               if (!CoinAbs(rhsW_[i]))
+               if (!std::abs(rhsW_[i]))
                     rhsW_[i] = 0.0;
-               if (!CoinAbs(rhsU_[i]))
+               if (!std::abs(rhsU_[i]))
                     rhsU_[i] = 0.0;
-               if (!CoinAbs(rhsL_[i]))
+               if (!std::abs(rhsL_[i]))
                     rhsL_[i] = 0.0;
           }
           if (solution_[0] > 0.0) {
@@ -2576,33 +2576,33 @@ void ClpPredictorCorrector::setupForSolve(const int phase)
     }
 #if 0
           for (int i = 0; i < numberTotal; i++) {
-               if (!CoinAbs(rhsZ_[i]))
+               if (!std::abs(rhsZ_[i]))
                     rhsZ_[i] = 0.0;
-               if (!CoinAbs(rhsW_[i]))
+               if (!std::abs(rhsW_[i]))
                     rhsW_[i] = 0.0;
-               if (!CoinAbs(rhsU_[i]))
+               if (!std::abs(rhsU_[i]))
                     rhsU_[i] = 0.0;
-               if (!CoinAbs(rhsL_[i]))
+               if (!std::abs(rhsL_[i]))
                     rhsL_[i] = 0.0;
           }
           if (solution_[0] > 0.0) {
                for (int i = 0; i < numberTotal; i++)
-                    printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, CoinAbs(solution_[i]),
-                           diagonal_[i], CoinAbs(dj_[i]),
+                    printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, std::abs(solution_[i]),
+                           diagonal_[i], std::abs(dj_[i]),
                            lowerSlack_[i], zVec_[i],
                            upperSlack_[i], wVec_[i]);
                for (int i = 0; i < numberTotal; i++)
-                    printf("%d %.18g %.18g %.18g %.18g %.18g\n", i, CoinAbs(rhsC_[i]),
+                    printf("%d %.18g %.18g %.18g %.18g %.18g\n", i, std::abs(rhsC_[i]),
                            rhsZ_[i], rhsL_[i],
                            rhsW_[i], rhsU_[i]);
           } else {
                for (int i = 0; i < numberTotal; i++)
-                    printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, CoinAbs(solution_[i]),
-                           diagonal_[i], CoinAbs(dj_[i]),
+                    printf("%d %.18g %.18g %.18g %.18g %.18g %.18g %.18g\n", i, std::abs(solution_[i]),
+                           diagonal_[i], std::abs(dj_[i]),
                            upperSlack_[i], wVec_[i],
                            lowerSlack_[i], zVec_[i] );
                for (int i = 0; i < numberTotal; i++)
-                    printf("%d %.18g %.18g %.18g %.18g %.18g\n", i, CoinAbs(rhsC_[i]),
+                    printf("%d %.18g %.18g %.18g %.18g %.18g\n", i, std::abs(rhsC_[i]),
                            rhsW_[i], rhsU_[i],
                            rhsZ_[i], rhsL_[i]);
           }
@@ -2627,8 +2627,8 @@ void ClpPredictorCorrector::setupForSolve(const int phase)
   case 3: {
     CoinWorkDouble minBeta = 0.1 * mu_;
     CoinWorkDouble maxBeta = 10.0 * mu_;
-    CoinWorkDouble dualStep = CoinMin(1.0, actualDualStep_ + 0.1);
-    CoinWorkDouble primalStep = CoinMin(1.0, actualPrimalStep_ + 0.1);
+    CoinWorkDouble dualStep = std::min(1.0, actualDualStep_ + 0.1);
+    CoinWorkDouble primalStep = std::min(1.0, actualPrimalStep_ + 0.1);
 #ifdef SOME_DEBUG
     printf("good complementarity range %g to %g\n", minBeta, maxBeta);
 #endif
@@ -2656,7 +2656,7 @@ void ClpPredictorCorrector::setupForSolve(const int phase)
             value = (minBeta - gapProduct);
             assert(value > 0.0);
           } else if (gapProduct > maxBeta) {
-            value = CoinMax(maxBeta - gapProduct, -maxBeta);
+            value = std::max(maxBeta - gapProduct, -maxBeta);
             assert(value < 0.0);
           }
           rhsZ_[iColumn] += value;
@@ -2679,7 +2679,7 @@ void ClpPredictorCorrector::setupForSolve(const int phase)
             value = (minBeta - gapProduct);
             assert(value > 0.0);
           } else if (gapProduct > maxBeta) {
-            value = CoinMax(maxBeta - gapProduct, -maxBeta);
+            value = std::max(maxBeta - gapProduct, -maxBeta);
             assert(value < 0.0);
           }
           rhsW_[iColumn] += value;
@@ -2815,7 +2815,7 @@ bool ClpPredictorCorrector::checkGoodMove(const bool doCorrector,
     goodMove = checkGoodMove2(step, bestNextGap, allowIncreasingGap);
   // Say good if small
   //if (quadraticObj) {
-  if (CoinMax(actualDualStep_, actualPrimalStep_) < 1.0e-6)
+  if (std::max(actualDualStep_, actualPrimalStep_) < 1.0e-6)
     goodMove = true;
   if (!goodMove) {
     //try smaller of two
@@ -2887,15 +2887,15 @@ bool ClpPredictorCorrector::checkGoodMove(const bool doCorrector,
           //sumPerturbCost-=deltaX_[iColumn];
           //deltaObjectiveDual -= deltaW_[iColumn] * upper_[iColumn];
         //}
-        CoinWorkDouble change = CoinAbs(workArray_[iColumn] - deltaZ_[iColumn] + deltaW_[iColumn]);
-        error = CoinMax(change, error);
+        CoinWorkDouble change = std::abs(workArray_[iColumn] - deltaZ_[iColumn] + deltaW_[iColumn]);
+        error = std::max(change, error);
       }
       //deltaObjectivePrimal += cost_[iColumn] * deltaX_[iColumn];
     }
     //deltaObjectivePrimal+=sumPerturbCost*linearPerturbation_;
     CoinWorkDouble testValue;
     if (error > 0.0) {
-      testValue = 1.0e1 * CoinMax(maximumDualError_, 1.0e-12) / error;
+      testValue = 1.0e1 * std::max(maximumDualError_, 1.0e-12) / error;
     } else {
       testValue = 1.0e1;
     }
@@ -2912,7 +2912,7 @@ bool ClpPredictorCorrector::checkGoodMove(const bool doCorrector,
     && maximumRHSChange_ > 1.0e-16 * solutionNorm_) {
     //check change in AX not too much
     //??? could be dropped row going infeasible
-    CoinWorkDouble ratio = 1.0e1 * CoinMax(maximumRHSError_, 1.0e-12) / maximumRHSChange_;
+    CoinWorkDouble ratio = 1.0e1 * std::max(maximumRHSError_, 1.0e-12) / maximumRHSChange_;
     if (ratio < actualPrimalStep_) {
       handler_->message(CLP_BARRIER_REDUCING, messages_)
         << "primal" << static_cast< double >(actualPrimalStep_)
@@ -3018,8 +3018,8 @@ bool ClpPredictorCorrector::checkGoodMove2(CoinWorkDouble move,
           //+gammaTerm*solution_[iColumn];
           CoinWorkDouble newInfeasibility = nextDj[iColumn] - newZ + newW
             + gammaTerm * (solution_[iColumn] + actualPrimalStep_ * deltaX_[iColumn]);
-          maximumDualError = CoinMax(maximumDualError, newInfeasibility);
-          //if (CoinAbs(newInfeasibility)>CoinMax(2000.0*maximumDualError_,1.0e-2)) {
+          maximumDualError = std::max(maximumDualError, newInfeasibility);
+          //if (std::abs(newInfeasibility)>std::max(2000.0*maximumDualError_,1.0e-2)) {
           //if (dualInfeasibility*newInfeasibility<0.0) {
           //  printf("%d current %g next %g\n",iColumn,dualInfeasibility,
           //       newInfeasibility);
@@ -3040,7 +3040,7 @@ bool ClpPredictorCorrector::checkGoodMove2(CoinWorkDouble move,
     errorCheck = maximumBoundInfeasibility_;
   }
   // scale back move
-  move = CoinMin(move, 0.95);
+  move = std::min(move, 0.95);
   //scale
   if ((1.0 - move) * errorCheck > primalTolerance()) {
     if (nextGap < gammap * (1.0 - move) * errorCheck) {
@@ -3084,7 +3084,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
     freeMultiplier = 1.0e12;
   }
   freeMultiplier = 0.5 / freeMultiplier;
-  CoinWorkDouble condition = CoinAbs(cholesky_->choleskyCondition());
+  CoinWorkDouble condition = std::abs(cholesky_->choleskyCondition());
   bool caution;
   if ((condition < 1.0e10 && trueNorm < 1.0e12) || numberIterations_ < 20) {
     caution = false;
@@ -3122,7 +3122,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
   int numberDecreased = 0;
   CoinWorkDouble largestDiagonal = 0.0;
   CoinWorkDouble smallestDiagonal = 1.0e50;
-  CoinWorkDouble largeGap2 = CoinMax(1.0e7, 1.0e2 * solutionNorm_);
+  CoinWorkDouble largeGap2 = std::max(1.0e7, 1.0e2 * solutionNorm_);
   //largeGap2 = 1.0e9;
   // When to start looking at killing (factor0
   CoinWorkDouble killFactor;
@@ -3147,13 +3147,13 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
       killFactor = 1.0;
     } else if (numberIterations_ < 2 * KILL_ITERATION) {
       killFactor = 5.0;
-      stepLength_ = CoinMax(stepLength_, 0.9995);
+      stepLength_ = std::max(stepLength_, 0.9995);
     } else if (numberIterations_ < 4 * KILL_ITERATION) {
       killFactor = 20.0;
-      stepLength_ = CoinMax(stepLength_, 0.99995);
+      stepLength_ = std::max(stepLength_, 0.99995);
     } else {
       killFactor = 1.0e2;
-      stepLength_ = CoinMax(stepLength_, 0.999995);
+      stepLength_ = std::max(stepLength_, 0.999995);
     }
   } else {
     killFactor = 1.0;
@@ -3178,7 +3178,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
      for (iRow = 0; iRow < numberRows_; iRow++) {
           CoinWorkDouble value = errorRegion_[iRow];
           CoinWorkDouble valueNew = rhsFixRegion_[iRow];
-          if (CoinAbs(value) < tol && CoinAbs(valueNew) > tol) {
+          if (std::abs(value) < tol && std::abs(valueNew) > tol) {
                printf("row %d old %g new %g\n", iRow, value, valueNew);
                goneInf = true;
           }
@@ -3224,7 +3224,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
       CoinWorkDouble sUpper = extra;
       CoinWorkDouble sLower = extra;
       CoinWorkDouble kill;
-      if (CoinAbs(newPrimal) > 1.0e4) {
+      if (std::abs(newPrimal) > 1.0e4) {
         kill = killTolerance * 1.0e-4 * newPrimal;
       } else {
         kill = killTolerance;
@@ -3255,10 +3255,10 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
         } else {
           lower_[iColumn] = trueLower;
           setLowerBound(iColumn);
-          lowerSlack_[iColumn] = CoinMax(newPrimal - trueLower, 1.0);
+          lowerSlack_[iColumn] = std::max(newPrimal - trueLower, 1.0);
           upper_[iColumn] = trueUpper;
           setUpperBound(iColumn);
-          upperSlack_[iColumn] = CoinMax(trueUpper - newPrimal, 1.0);
+          upperSlack_[iColumn] = std::max(trueUpper - newPrimal, 1.0);
         }
       } else if (fakeNewBounds) {
         lower_[iColumn] = newPrimal - largeGap2;
@@ -3277,8 +3277,8 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
         newSlack = lowerSlack_[iColumn] + actualPrimalStep_ * (oldPrimal - oldSlack + thisWeight - lower_[iColumn]);
         if (fakeOldBounds)
           newSlack = lowerSlack_[iColumn];
-        CoinWorkDouble epsilon = CoinAbs(newSlack) * epsilonBase;
-        epsilon = CoinMin(epsilon, 1.0e-5);
+        CoinWorkDouble epsilon = std::abs(newSlack) * epsilonBase;
+        epsilon = std::min(epsilon, 1.0e-5);
         //epsilon=1.0e-14;
         //make sure reasonable
         if (zValue < epsilon) {
@@ -3292,7 +3292,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
           } else {
             larger = feasibleSlack;
           }
-          if (CoinAbs(feasibleSlack - newSlack) < 1.0e-6 * larger) {
+          if (std::abs(feasibleSlack - newSlack) < 1.0e-6 * larger) {
             newSlack = feasibleSlack;
           }
         }
@@ -3303,9 +3303,9 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
         if (newSlack < smallerSlack) {
           smallerSlack = newSlack;
         }
-        lowerBoundInfeasibility = CoinAbs(newPrimal - lowerSlack_[iColumn] - lower_[iColumn]);
-        if (lowerSlack_[iColumn] <= kill * killFactor && CoinAbs(newPrimal - lower_[iColumn]) <= kill * killFactor) {
-          CoinWorkDouble step = CoinMin(actualPrimalStep_ * 1.1, 1.0);
+        lowerBoundInfeasibility = std::abs(newPrimal - lowerSlack_[iColumn] - lower_[iColumn]);
+        if (lowerSlack_[iColumn] <= kill * killFactor && std::abs(newPrimal - lower_[iColumn]) <= kill * killFactor) {
+          CoinWorkDouble step = std::min(actualPrimalStep_ * 1.1, 1.0);
           CoinWorkDouble newPrimal2 = solution_[iColumn] + step * thisWeight;
           if (newPrimal2 < newPrimal && dj_[iColumn] > 1.0e-5 && numberIterations_ > 50 - 40) {
             newPrimal = lower_[iColumn];
@@ -3313,7 +3313,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
             //printf("fixing %d to lower\n",iColumn);
           }
         }
-        if (lowerSlack_[iColumn] <= kill && CoinAbs(newPrimal - lower_[iColumn]) <= kill) {
+        if (lowerSlack_[iColumn] <= kill && std::abs(newPrimal - lower_[iColumn]) <= kill) {
           //may be better to leave at value?
           newPrimal = lower_[iColumn];
           lowerSlack_[iColumn] = 0.0;
@@ -3329,8 +3329,8 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
         newSlack = upperSlack_[iColumn] + actualPrimalStep_ * (-oldPrimal - oldSlack - thisWeight + upper_[iColumn]);
         if (fakeOldBounds)
           newSlack = upperSlack_[iColumn];
-        CoinWorkDouble epsilon = CoinAbs(newSlack) * epsilonBase;
-        epsilon = CoinMin(epsilon, 1.0e-5);
+        CoinWorkDouble epsilon = std::abs(newSlack) * epsilonBase;
+        epsilon = std::min(epsilon, 1.0e-5);
         //make sure reasonable
         //epsilon=1.0e-14;
         if (wValue < epsilon) {
@@ -3344,7 +3344,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
           } else {
             larger = feasibleSlack;
           }
-          if (CoinAbs(feasibleSlack - newSlack) < 1.0e-6 * larger) {
+          if (std::abs(feasibleSlack - newSlack) < 1.0e-6 * larger) {
             newSlack = feasibleSlack;
           }
         }
@@ -3355,9 +3355,9 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
         if (newSlack < smallerSlack) {
           smallerSlack = newSlack;
         }
-        upperBoundInfeasibility = CoinAbs(newPrimal + upperSlack_[iColumn] - upper_[iColumn]);
-        if (upperSlack_[iColumn] <= kill * killFactor && CoinAbs(newPrimal - upper_[iColumn]) <= kill * killFactor) {
-          CoinWorkDouble step = CoinMin(actualPrimalStep_ * 1.1, 1.0);
+        upperBoundInfeasibility = std::abs(newPrimal + upperSlack_[iColumn] - upper_[iColumn]);
+        if (upperSlack_[iColumn] <= kill * killFactor && std::abs(newPrimal - upper_[iColumn]) <= kill * killFactor) {
+          CoinWorkDouble step = std::min(actualPrimalStep_ * 1.1, 1.0);
           CoinWorkDouble newPrimal2 = solution_[iColumn] + step * thisWeight;
           if (newPrimal2 > newPrimal && dj_[iColumn] < -1.0e-5 && numberIterations_ > 50 - 40) {
             newPrimal = upper_[iColumn];
@@ -3365,7 +3365,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
             //printf("fixing %d to upper\n",iColumn);
           }
         }
-        if (upperSlack_[iColumn] <= kill && CoinAbs(newPrimal - upper_[iColumn]) <= kill) {
+        if (upperSlack_[iColumn] <= kill && std::abs(newPrimal - upper_[iColumn]) <= kill) {
           //may be better to leave at value?
           newPrimal = upper_[iColumn];
           upperSlack_[iColumn] = 0.0;
@@ -3387,8 +3387,8 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
                }
 #endif
       solution_[iColumn] = newPrimal;
-      if (CoinAbs(newPrimal) > solutionNorm) {
-        solutionNorm = CoinAbs(newPrimal);
+      if (std::abs(newPrimal) > solutionNorm) {
+        solutionNorm = std::abs(newPrimal);
       }
       if (!thisKilled) {
         CoinWorkDouble gammaTerm = gamma2;
@@ -3397,7 +3397,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
           quadraticOffset += newPrimal * newPrimal * primalR_[iColumn];
         }
         CoinWorkDouble dualInfeasibility = reducedCost - zVec_[iColumn] + wVec_[iColumn] + gammaTerm * newPrimal;
-        if (CoinAbs(dualInfeasibility) > dualTolerance) {
+        if (std::abs(dualInfeasibility) > dualTolerance) {
 #if 0
                          if (dualInfeasibility > 0.0) {
                               // To improve we could reduce t and/or increase z
@@ -3405,28 +3405,28 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
                                    CoinWorkDouble complementarity = zVec_[iColumn] * lowerSlack_[iColumn];
                                    if (complementarity < nextMu) {
                                         CoinWorkDouble change =
-                                             CoinMin(dualInfeasibility,
+                                             std::min(dualInfeasibility,
                                                      (nextMu - complementarity) / lowerSlack_[iColumn]);
                                         dualInfeasibility -= change;
                                         COIN_DETAIL_PRINT(printf("%d lb locomp %g - dual inf from %g to %g\n",
                                                iColumn, complementarity, dualInfeasibility + change,
 								 dualInfeasibility));
                                         zVec_[iColumn] += change;
-                                        zValue = CoinMax(zVec_[iColumn], 1.0e-12);
+                                        zValue = std::max(zVec_[iColumn], 1.0e-12);
                                    }
                               }
                               if (upperBound(iColumn)) {
                                    CoinWorkDouble complementarity = wVec_[iColumn] * upperSlack_[iColumn];
                                    if (complementarity > nextMu) {
                                         CoinWorkDouble change =
-                                             CoinMin(dualInfeasibility,
+                                             std::min(dualInfeasibility,
                                                      (complementarity - nextMu) / upperSlack_[iColumn]);
                                         dualInfeasibility -= change;
                                         COIN_DETAIL_PRINT(printf("%d ub hicomp %g - dual inf from %g to %g\n",
                                                iColumn, complementarity, dualInfeasibility + change,
 								 dualInfeasibility));
                                         wVec_[iColumn] -= change;
-                                        wValue = CoinMax(wVec_[iColumn], 1.0e-12);
+                                        wValue = std::max(wVec_[iColumn], 1.0e-12);
                                    }
                               }
                          } else {
@@ -3435,28 +3435,28 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
                                    CoinWorkDouble complementarity = zVec_[iColumn] * lowerSlack_[iColumn];
                                    if (complementarity > nextMu) {
                                         CoinWorkDouble change =
-                                             CoinMax(dualInfeasibility,
+                                             std::max(dualInfeasibility,
                                                      (nextMu - complementarity) / lowerSlack_[iColumn]);
                                         dualInfeasibility -= change;
                                         COIN_DETAIL_PRINT(printf("%d lb hicomp %g - dual inf from %g to %g\n",
                                                iColumn, complementarity, dualInfeasibility + change,
 								 dualInfeasibility));
                                         zVec_[iColumn] += change;
-                                        zValue = CoinMax(zVec_[iColumn], 1.0e-12);
+                                        zValue = std::max(zVec_[iColumn], 1.0e-12);
                                    }
                               }
                               if (upperBound(iColumn)) {
                                    CoinWorkDouble complementarity = wVec_[iColumn] * upperSlack_[iColumn];
                                    if (complementarity < nextMu) {
                                         CoinWorkDouble change =
-                                             CoinMax(dualInfeasibility,
+                                             std::max(dualInfeasibility,
                                                      (complementarity - nextMu) / upperSlack_[iColumn]);
                                         dualInfeasibility -= change;
                                         COIN_DETAIL_PRINT(printf("%d ub locomp %g - dual inf from %g to %g\n",
                                                iColumn, complementarity, dualInfeasibility + change,
 								 dualInfeasibility));
                                         wVec_[iColumn] -= change;
-                                        wValue = CoinMax(wVec_[iColumn], 1.0e-12);
+                                        wValue = std::max(wVec_[iColumn], 1.0e-12);
                                    }
                               }
                          }
@@ -3469,7 +3469,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
         if (upperBoundInfeasibility > maximumBoundInfeasibility) {
           maximumBoundInfeasibility = upperBoundInfeasibility;
         }
-        dualInfeasibility = CoinAbs(dualInfeasibility);
+        dualInfeasibility = std::abs(dualInfeasibility);
         if (dualInfeasibility > maximumDualError) {
           //printf("bad dual %d %g\n",iColumn,
           // reducedCost-zVec_[iColumn]+wVec_[iColumn]+gammaTerm*newPrimal);
@@ -3560,7 +3560,7 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
      if (largestDiagonal > 1.0e17 * smallestDiagonal) {
           CoinWorkDouble killValue = largestDiagonal * 1.0e-17;
           for (int iColumn = 0; iColumn < numberTotal; iColumn++) {
-               if (CoinAbs(diagonal_[iColumn]) < killValue)
+               if (std::abs(diagonal_[iColumn]) < killValue)
                     diagonal_[iolumn] = 0.0;
           }
      }
@@ -3613,12 +3613,12 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
   for (iRow = 0; iRow < numberRows_; iRow++) {
     CoinWorkDouble value = errorRegion_[iRow];
     if (!dropped[iRow]) {
-      if (CoinAbs(value) > maximumRHSError1) {
-        maximumRHSError1 = CoinAbs(value);
+      if (std::abs(value) > maximumRHSError1) {
+        maximumRHSError1 = std::abs(value);
       }
     } else {
-      if (CoinAbs(value) > maximumRHSError2) {
-        maximumRHSError2 = CoinAbs(value);
+      if (std::abs(value) > maximumRHSError2) {
+        maximumRHSError2 = std::abs(value);
       }
       primalOffset += value * dualArray[iRow];
     }
@@ -3659,12 +3659,12 @@ int ClpPredictorCorrector::updateSolution(CoinWorkDouble /*nextGap*/)
   if (maximumBoundInfeasibility_ > primalTolerance() || scaledRHSError > primalTolerance())
     primalFeasible = false;
 #else
-  if (maximumBoundInfeasibility_ > primalTolerance() || scaledRHSError > CoinMax(CoinMin(100.0 * primalTolerance(), 1.0e-5), primalTolerance()))
+  if (maximumBoundInfeasibility_ > primalTolerance() || scaledRHSError > std::max(std::min(100.0 * primalTolerance(), 1.0e-5), primalTolerance()))
     primalFeasible = false;
 #endif
   // relax dual test if obj big and gap smallish
-  CoinWorkDouble gap = CoinAbs(primalObjective_ - dualObjective_);
-  CoinWorkDouble sizeObj = CoinMin(CoinAbs(primalObjective_), CoinAbs(dualObjective_)) + 1.0e-50;
+  CoinWorkDouble gap = std::abs(primalObjective_ - dualObjective_);
+  CoinWorkDouble sizeObj = std::min(std::abs(primalObjective_), std::abs(dualObjective_)) + 1.0e-50;
   //printf("gap %g sizeObj %g ratio %g comp %g\n",
   //     gap,sizeObj,gap/sizeObj,complementarityGap_);
   if (numberIterations_ > 100 && gap / sizeObj < 1.0e-9 && complementarityGap_ < 1.0e-7 * sizeObj)
@@ -3805,7 +3805,7 @@ void ClpPredictorCorrector::debugMove(int /*phase*/,
         //if (zValue > dualTolerance) {
         //  dualObjectiveValue += lower_[iColumn] * zVec_[iColumn];
         //}
-        lowerBoundInfeasibility = CoinAbs(newPrimal - newSlack - lower_[iColumn]);
+        lowerBoundInfeasibility = std::abs(newPrimal - newSlack - lower_[iColumn]);
         //newGap += newSlack * zValue;
       }
       if (upperBound(iColumn)) {
@@ -3814,11 +3814,11 @@ void ClpPredictorCorrector::debugMove(int /*phase*/,
         //if (wValue > dualTolerance) {
         //  dualObjectiveValue -= upper_[iColumn] * wVec_[iColumn];
         //}
-        upperBoundInfeasibility = CoinAbs(newPrimal + newSlack - upper_[iColumn]);
+        upperBoundInfeasibility = std::abs(newPrimal + newSlack - upper_[iColumn]);
         //newGap += newSlack * wValue;
       }
-      if (CoinAbs(newPrimal) > solutionNorm) {
-        solutionNorm = CoinAbs(newPrimal);
+      if (std::abs(newPrimal) > solutionNorm) {
+        solutionNorm = std::abs(newPrimal);
       }
       CoinWorkDouble gammaTerm = gamma2;
       if (primalR_) {
@@ -3826,7 +3826,7 @@ void ClpPredictorCorrector::debugMove(int /*phase*/,
         //quadraticOffset += newPrimal * newPrimal * primalR_[iColumn];
       }
       CoinWorkDouble dualInfeasibility = reducedCost - zValue + wValue + gammaTerm * newPrimal;
-      //if (CoinAbs(dualInfeasibility) > dualTolerance) {
+      //if (std::abs(dualInfeasibility) > dualTolerance) {
       //  dualFake += newPrimal * dualInfeasibility;
       //}
       if (lowerBoundInfeasibility > maximumBoundInfeasibility) {
@@ -3835,7 +3835,7 @@ void ClpPredictorCorrector::debugMove(int /*phase*/,
       if (upperBoundInfeasibility > maximumBoundInfeasibility) {
         maximumBoundInfeasibility = upperBoundInfeasibility;
       }
-      dualInfeasibility = CoinAbs(dualInfeasibility);
+      dualInfeasibility = std::abs(dualInfeasibility);
       if (dualInfeasibility > maximumDualError) {
         //printf("bad dual %d %g\n",iColumn,
         // reducedCost-zVec_[iColumn]+wVec_[iColumn]+gammaTerm*newPrimal);
@@ -3884,12 +3884,12 @@ void ClpPredictorCorrector::debugMove(int /*phase*/,
   for (iRow = 0; iRow < numberRows_; iRow++) {
     CoinWorkDouble value = errorRegionNew[iRow];
     if (!dropped[iRow]) {
-      if (CoinAbs(value) > maximumRHSError1) {
-        maximumRHSError1 = CoinAbs(value);
+      if (std::abs(value) > maximumRHSError1) {
+        maximumRHSError1 = std::abs(value);
       }
     } else {
-      if (CoinAbs(value) > maximumRHSError2) {
-        maximumRHSError2 = CoinAbs(value);
+      if (std::abs(value) > maximumRHSError2) {
+        maximumRHSError2 = std::abs(value);
       }
       //primalOffset += value * dualNew[iRow];
     }

@@ -1195,7 +1195,7 @@ public:
                 if she/he needs these short cuts.  I will not debug unless in Coin
                 repository.  See COIN_CLP_VETTED comments.
          0x01000000 is Cbc (and in branch and bound)
-         0x02000000 is in a different branch and bound
+         0x02000000 is in a different branch and bound (or clp dual then primal)
 	 0x04000000 - zero costs!
 	 0x08000000 - get correct duals  on max iterations
      */
@@ -1455,7 +1455,7 @@ public:
 };
 
 // Semi experimental options 
-#ifdef CLP_EXPERIMENT_JJF
+#if 1 //def CLP_EXPERIMENT_JJF
 #define CLP_CHECK_SCALING 1 // for badly scaled problems
 #define OSICLP_TUNING 10 // various switches
 #define CLP_MOVEMENT 2 // be more careful on pivot row in primal

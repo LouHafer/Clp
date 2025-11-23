@@ -992,7 +992,7 @@ CbcOrClpParam::setIntParameterWithMessage(CbcModel &model, int value, int &retur
     switch (type_) {
     case CLP_PARAM_INT_LOGLEVEL:
       oldValue = model.messageHandler()->logLevel();
-      model.messageHandler()->setLogLevel(CoinAbs(value));
+      model.messageHandler()->setLogLevel(std::abs(value));
       break;
     case CLP_PARAM_INT_SOLVERLOGLEVEL:
       oldValue = model.solver()->messageHandler()->logLevel();
@@ -4474,7 +4474,7 @@ void restoreSolution(ClpSimplex *lpSolver, std::string fileName, int mode)
           throw("Error in fread");
       } else {
         std::cout << "Mismatch on rows and/or columns - truncating" << std::endl;
-        double *temp = new double[CoinMax(numberRowsFile, numberColumnsFile)];
+        double *temp = new double[std::max(numberRowsFile, numberColumnsFile)];
         nRead = fread(temp, sizeof(double), numberRowsFile, fp);
         if (nRead != static_cast< size_t >(numberRowsFile))
           throw("Error in fread");
