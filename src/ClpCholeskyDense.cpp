@@ -97,6 +97,24 @@ ClpCholeskyBase *ClpCholeskyDense::clone() const
 int ClpCholeskyDense::reserveSpace(const ClpCholeskyBase *factor, int numberRows)
 {
   numberRows_ = numberRows;
+  /* Use double arithmetic to detect overflow before converting to int. */
+  double numberBlocksD = static_cast<double>((numberRows_ + BLOCK - 1) >> BLOCKSHIFT);
+  numberBlocksD = numberBlocksD + (numberBlocksD * (numberBlocksD + 1.0)) / 2.0;
+  double sizeFactorD = numberBlocksD * BLOCKSQ;
+#ifdef CHOL_COMPARE
+  sizeFactorD += 95000;
+#endif
+  /* Limit factor size to avoid int overflow and excessively large allocations.
+     Use double arithmetic to compute the size without truncation, then compare
+     against both INT_MAX (integer overflow guard) and a practical memory cap
+     (4 GB for the dense factor array).  Either condition falls back to simplex. */
+  static const double kMaxElements = static_cast<double>(COIN_INT_MAX);
+  static const double kMemCapElements
+    = 4.0 * 1024.0 * 1024.0 * 1024.0 / static_cast<double>(sizeof(longDouble));
+  if (sizeFactorD >= kMaxElements || sizeFactorD >= kMemCapElements) {
+    /* Factor size overflows int or exceeds memory cap — too large for dense Cholesky. */
+    return -1;
+  }
   int numberBlocks = (numberRows_ + BLOCK - 1) >> BLOCKSHIFT;
   /* allow one stripe extra*/
   numberBlocks = numberBlocks + ((numberBlocks * (numberBlocks + 1)) / 2);
@@ -106,7 +124,14 @@ int ClpCholeskyDense::reserveSpace(const ClpCholeskyBase *factor, int numberRows
   sizeFactor_ += 95000;
 #endif
   if (!factor) {
-    sparseFactor_ = new longDouble[sizeFactor_];
+    bool noMemory = false;
+    try {
+      sparseFactor_ = new longDouble[sizeFactor_];
+    } catch (...) {
+      noMemory = true;
+    }
+    if (noMemory)
+      return -1;
     rowsDropped_ = new char[numberRows_];
     memset(rowsDropped_, 0, numberRows_);
     workDouble_ = new longDouble[numberRows_];
@@ -149,7 +174,9 @@ int ClpCholeskyDense::order(ClpInterior *model)
   } else {
     numberRows = 2 * numberRowsModel + numberColumns;
   }
-  reserveSpace(NULL, numberRows);
+  int rc = reserveSpace(NULL, numberRows);
+  if (rc)
+    return rc;
   rowCopy_ = model->clpMatrix()->reverseOrderedCopy();
   return 0;
 }
@@ -635,7 +662,20 @@ void ClpCholeskyDense::factorizePart2(int *rowsDropped)
     nBlock++;
     block -= nBlock + ifOdd;
   }
-  ClpCholeskyDenseC info;
+  ClpCholeskyDenseC info = {};
+  struct StopContext {
+    ClpInterior *model;
+    unsigned int calls;
+  } stopContext = {model_, 0};
+  info.stopContext = &stopContext;
+#ifndef CLP_CILK
+  info.stopRequested = [](void *context) -> int {
+    StopContext &stop = *static_cast<StopContext *>(context);
+    // A leaf handles a small dense tile; CPU-clock reads on every tile
+    // otherwise dominate these kernels when a time limit is enabled.
+    return stop.model && stop.model->barrierStopRequested((++stop.calls & 63) == 0);
+  };
+#endif
   info.diagonal_ = diagonal_;
   info.doubleParameters_[0] = doubleParameters_[10];
   info.integerParameters_[0] = integerParameters_[34];
@@ -651,6 +691,8 @@ void ClpCholeskyDense::factorizePart2(int *rowsDropped)
   info.integerParameters_[1] = model_->numberThreads();
   ClpCholeskySpawn(&info);
 #endif
+  if (model_ && (model_->status() == 3 || model_->status() == 5))
+    return;
   double largest = 0.0;
   double smallest = COIN_DBL_MAX;
   int numberDropped = 0;
@@ -670,6 +712,8 @@ void ClpCholeskyDense::factorizePart2(int *rowsDropped)
 void ClpCholeskyCfactor(ClpCholeskyDenseC *thisStruct, longDouble *a, int n, int numberBlocks,
   longDouble *diagonal, longDouble *work, int *rowsDropped)
 {
+  if (thisStruct->stopRequested && thisStruct->stopRequested(thisStruct->stopContext))
+    return;
   if (n <= BLOCK) {
     ClpCholeskyCfactorLeaf(thisStruct, a, n, diagonal, work, rowsDropped);
   } else {
@@ -693,6 +737,8 @@ void ClpCholeskyCtriRec(ClpCholeskyDenseC *thisStruct, longDouble *aTri, int nTh
   int nLeft, int iBlock, int jBlock,
   int numberBlocks)
 {
+  if (thisStruct->stopRequested && thisStruct->stopRequested(thisStruct->stopContext))
+    return;
   if (nThis <= BLOCK && nLeft <= BLOCK) {
     ClpCholeskyCtriRecLeaf(/*thisStruct,*/ aTri, aUnder, diagonal, work, nLeft);
   } else if (nThis < nLeft) {
@@ -727,6 +773,8 @@ void ClpCholeskyCrecTri(ClpCholeskyDenseC *thisStruct, longDouble *aUnder, int n
   longDouble *diagonal, longDouble *work,
   int numberBlocks)
 {
+  if (thisStruct->stopRequested && thisStruct->stopRequested(thisStruct->stopContext))
+    return;
   if (nTri <= BLOCK && nDo <= BLOCK) {
     ClpCholeskyCrecTriLeaf(/*thisStruct,*/ aUnder, aTri, /*diagonal,*/ work, nTri);
   } else if (nTri < nDo) {
@@ -765,6 +813,8 @@ void ClpCholeskyCrecRec(ClpCholeskyDenseC *thisStruct, longDouble *above, int nU
   int iBlock, int jBlock,
   int numberBlocks)
 {
+  if (thisStruct->stopRequested && thisStruct->stopRequested(thisStruct->stopContext))
+    return;
   if (nDo <= BLOCK && nUnder <= BLOCK && nUnderK <= BLOCK) {
     assert(nDo == BLOCK && nUnder == BLOCK);
     ClpCholeskyCrecRecLeaf(/*thisStruct,*/ above, aUnder, aOther, work, nUnderK);

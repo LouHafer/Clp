@@ -156,7 +156,14 @@ void ClpNode::gutsOfConstructor(ClpSimplex *model, const ClpNodeStuff *stuff,
         CoinMemcpyN(model->dualRowSolution(), numberRows, dualSolution_ + numberColumns);
       }
       pivotVariables_ = new int[maximumRows_];
-      if (model->pivotVariable() && model->numberRows() == numberRows) 
+      // Only copy pivotVariables_ when arraysExist==1 (small model with a
+      // freshly-allocated pivotVariable_ from startFastDual2/createRim).
+      // For arraysExist==2 the model passed is info->large_, whose
+      // pivotVariable_ may be stale (rows were added via cuts since it was
+      // last solved), causing a heap-buffer-overflow.  Those nodes are
+      // restored with applyNode(..., 3) which never reads pivotVariables_,
+      // so filling with -1 is safe.
+      if (arraysExist == 1 && model->pivotVariable())
 	CoinMemcpyN(model->pivotVariable(), numberRows, pivotVariables_);
       else
         CoinFillN(pivotVariables_, numberRows, -1);
@@ -440,14 +447,14 @@ void ClpNode::gutsOfConstructor(ClpSimplex *model, const ClpNodeStuff *stuff,
       delete[] lower_;
       delete[] upper_;
       maximumIntegers_ = iInteger;
-      lower_ = new int[maximumIntegers_];
-      upper_ = new int[maximumIntegers_];
+      lower_ = new double[maximumIntegers_];
+      upper_ = new double[maximumIntegers_];
     }
     iInteger = 0;
     for (iColumn = 0; iColumn < numberColumns; iColumn++) {
       if (integerType[iColumn]) {
-        lower_[iInteger] = static_cast< int >(lower[iColumn]);
-        upper_[iInteger] = static_cast< int >(upper[iColumn]);
+        lower_[iInteger] = lower[iColumn];
+        upper_[iInteger] = upper[iColumn];
         iInteger++;
       }
     }
@@ -529,8 +536,8 @@ void ClpNode::createArrays(ClpSimplex *model)
     delete[] lower_;
     delete[] upper_;
     maximumIntegers_ = numberIntegers;
-    lower_ = new int[numberIntegers];
-    upper_ = new int[numberIntegers];
+    lower_ = new double[numberIntegers];
+    upper_ = new double[numberIntegers];
   }
 }
 // Clean up as crunch is different model
@@ -583,9 +590,9 @@ void ClpNode::applyNode(ClpSimplex *model, int doBoundsEtc)
     for (int iColumn = 0; iColumn < numberColumns; iColumn++) {
       if (integerType[iColumn]) {
         iInteger++;
-        if (lower_[iInteger] != static_cast< int >(lower[iColumn]))
+        if (lower_[iInteger] != lower[iColumn])
           model->setColumnLower(iColumn, lower_[iInteger]);
-        if (upper_[iInteger] != static_cast< int >(upper[iColumn]))
+        if (upper_[iInteger] != upper[iColumn])
           model->setColumnUpper(iColumn, upper_[iInteger]);
       }
     }

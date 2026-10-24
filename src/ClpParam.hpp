@@ -139,7 +139,6 @@ public:
       ERRORSALLOWED,
       KEEPNAMES,
       KKT,
-      MESSAGES,
       PERTURBATION,
       PFI,
       SPARSEFACTOR,
@@ -159,6 +158,7 @@ public:
       FACTORIZATION,
       GAMMA,
       INTPRINT,
+      MESSAGES,
       PRESOLVE,
       PRIMALPIVOT,
       SCALING,
@@ -192,6 +192,7 @@ public:
       LOGLEVEL,
       OUTPUTFORMAT,
       PRINTOPTIONS,
+      PROGRESSITER,
       VERBOSE,
       LASTINTPARAM,
       

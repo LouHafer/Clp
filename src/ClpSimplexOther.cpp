@@ -1150,7 +1150,7 @@ int ClpSimplexOther::readBasis(const char *fileName)
   CoinMpsIO m;
   m.passInMessageHandler(handler_);
   *m.messagesPointer() = coinMessages();
-  bool savePrefix = m.messageHandler()->prefix();
+  int savePrefix = m.messageHandler()->prefix();
   m.messageHandler()->setPrefix(handler_->prefix());
   status = m.readBasis(fileName, "", columnActivity_, status_ + numberColumns_,
     status_,
@@ -1370,7 +1370,10 @@ ClpSimplexOther::dualOfModel(double fractionRowRanges, double fractionColumnRang
   modelDual->loadProblem(rowCopy, fromRowsLower, fromRowsUpper, newObjective,
     fromColumnsLower, fromColumnsUpper);
   modelDual->setObjectiveOffset(objOffset);
-  modelDual->setDualBound(model2->dualBound());
+  if (model2->exactDualBound())
+    modelDual->setExactDualBound(model2->dualBound());
+  else
+    modelDual->setDualBound(model2->dualBound());
   modelDual->setInfeasibilityCost(model2->infeasibilityCost());
   modelDual->setDualTolerance(model2->dualTolerance());
   modelDual->setPrimalTolerance(model2->primalTolerance());
@@ -1378,7 +1381,10 @@ ClpSimplexOther::dualOfModel(double fractionRowRanges, double fractionColumnRang
   modelDual->setSpecialOptions(model2->specialOptions());
   modelDual->setMoreSpecialOptions(model2->moreSpecialOptions());
   modelDual->setMaximumIterations(model2->maximumIterations());
-  modelDual->setFactorizationFrequency(model2->factorizationFrequency());
+  if (model2->exactFactorizationFrequency())
+    modelDual->setExactFactorizationFrequency(model2->factorizationFrequency());
+  else
+    modelDual->setFactorizationFrequency(model2->factorizationFrequency());
   modelDual->setLogLevel(model2->logLevel());
   delete[] fromRowsLower;
   delete[] fromRowsUpper;
@@ -2004,7 +2010,10 @@ ClpSimplexOther::crunch(double *rhs, int *whichRow, int *whichColumn,
           }
 #endif
     // Set some stuff
-    small->setDualBound(dualBound_);
+    if (exactDualBound_)
+      small->setExactDualBound(dualBound_);
+    else
+      small->setDualBound(dualBound_);
     small->setInfeasibilityCost(infeasibilityCost_);
     small->setSpecialOptions(specialOptions_);
     small->setPerturbation(perturbation_);
@@ -2798,7 +2807,7 @@ int ClpSimplexOther::parametrics(const char *dataFile)
 {
   int returnCode = -2;
   FILE *fp = fopen(dataFile, "r");
-  char line[200];
+  char line[260];
   if (!fp) {
     handler_->message(CLP_UNABLE_OPEN, messages_)
       << dataFile << CoinMessageEol;
@@ -2882,7 +2891,7 @@ int ClpSimplexOther::parametrics(const char *dataFile)
   if (intervalTheta >= endTheta)
     intervalTheta = 0.0;
   if (!good) {
-    char line2[300];
+    char line2[330];
     snprintf(line2, sizeof(line2), "Odd first line %s on file %s?", line, dataFile);
     handler_->message(CLP_GENERAL, messages_)
       << line2 << CoinMessageEol;

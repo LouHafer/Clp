@@ -13,6 +13,7 @@
 #endif
 #include "CoinHelperFunctions.hpp"
 #include "CoinFloatEqual.hpp"
+#include "CoinTime.hpp"
 #include "ClpSimplex.hpp"
 #include "ClpFactorization.hpp"
 #include "ClpPackedMatrix.hpp"
@@ -41,6 +42,8 @@
 #include <iostream>
 //#############################################################################
 
+static const unsigned int CLP_UNSCALED_CLEANUP = 0x20000000;
+
 ClpSimplex::ClpSimplex(bool emptyMessages)
   :
 
@@ -51,6 +54,7 @@ ClpSimplex::ClpSimplex(bool emptyMessages)
   , rowPrimalSequence_(-2)
   , bestObjectiveValue_(-COIN_DBL_MAX)
   , moreSpecialOptions_(2)
+  , blasNumThreads_(-1)
   , baseIteration_(0)
   , vectorMode_(0)
   , primalToleranceToGetOptimal_(-1.0)
@@ -59,6 +63,7 @@ ClpSimplex::ClpSimplex(bool emptyMessages)
   , largestDualError_(0.0)
   , alphaAccuracy_(-1.0)
   , dualBound_(1.0e10)
+  , exactDualBound_(false)
   , alpha_(0.0)
   , theta_(0.0)
   , lowerIn_(0.0)
@@ -174,6 +179,7 @@ ClpSimplex::ClpSimplex(const ClpModel *rhs,
   , rowPrimalSequence_(-2)
   , bestObjectiveValue_(-COIN_DBL_MAX)
   , moreSpecialOptions_(2)
+  , blasNumThreads_(-1)
   , baseIteration_(0)
   , vectorMode_(0)
   , primalToleranceToGetOptimal_(-1.0)
@@ -182,6 +188,7 @@ ClpSimplex::ClpSimplex(const ClpModel *rhs,
   , largestDualError_(0.0)
   , alphaAccuracy_(-1.0)
   , dualBound_(1.0e10)
+  , exactDualBound_(false)
   , alpha_(0.0)
   , theta_(0.0)
   , lowerIn_(0.0)
@@ -334,6 +341,7 @@ ClpSimplex::ClpSimplex(const ClpSimplex *rhs,
   , rowPrimalSequence_(-2)
   , bestObjectiveValue_(-COIN_DBL_MAX)
   , moreSpecialOptions_(2)
+  , blasNumThreads_(-1)
   , baseIteration_(0)
   , vectorMode_(rhs->vectorMode_)
   , primalToleranceToGetOptimal_(-1.0)
@@ -342,6 +350,7 @@ ClpSimplex::ClpSimplex(const ClpSimplex *rhs,
   , largestDualError_(0.0)
   , alphaAccuracy_(-1.0)
   , dualBound_(1.0e10)
+  , exactDualBound_(false)
   , alpha_(0.0)
   , theta_(0.0)
   , lowerIn_(0.0)
@@ -496,8 +505,13 @@ ClpSimplex::ClpSimplex(const ClpSimplex *rhs,
     perturbationArray_ = new double[maximumPerturbationSize_];
     for (i = 0; i < numberColumns; i++) {
       int iColumn = whichColumn[i];
-      perturbationArray_[2 * i] = rhs->perturbationArray_[2 * iColumn];
-      perturbationArray_[2 * i + 1] = rhs->perturbationArray_[2 * iColumn + 1];
+      if (2 * iColumn + 1 < rhs->maximumPerturbationSize_) {
+        perturbationArray_[2 * i] = rhs->perturbationArray_[2 * iColumn];
+        perturbationArray_[2 * i + 1] = rhs->perturbationArray_[2 * iColumn + 1];
+      } else {
+        perturbationArray_[2 * i] = 0.0;
+        perturbationArray_[2 * i + 1] = 0.0;
+      }
     }
   }
 }
@@ -1561,6 +1575,22 @@ int ClpSimplex::internalFactorize(int solveType)
   int totalSlacks = numberRows_;
   if (!status_)
     createStatus();
+  // If the wall-clock deadline has already passed, don't even attempt a
+  // (potentially very expensive) factorization. This matters because
+  // several callers (ClpSimplexPrimal/Dual "singular basis" recovery
+  // blocks) blindly retry internalFactorize() again after any nonzero
+  // return, without checking problemStatus_ first — without this guard
+  // such a retry would repeat the same slow factorization instead of
+  // returning promptly.
+  // ClpMaxWallSeconds holds an *absolute* epoch deadline (CoinWallclockTime()
+  // returns absolute epoch time, not "seconds since first call"), so an
+  // upper-bound sanity check here would permanently disable this guard;
+  // -1.0 is the sole "disabled" sentinel.
+  if (dblParam_[ClpMaxWallSeconds] >= 0.0
+    && CoinWallclockTime() >= dblParam_[ClpMaxWallSeconds]) {
+    problemStatus_ = 3;
+    return -1;
+  }
 
   bool valuesPass = false;
   if (solveType >= 10) {
@@ -2012,6 +2042,17 @@ int ClpSimplex::internalFactorize(int solveType)
 	   numberInside,sumInside,numberInsideLarge);
 #endif
   int status = factorization_->factorize(this, solveType, valuesPass);
+  if (status == -100) {
+    // Factorization aborted on its own wall-clock deadline (periodic check
+    // inside CoinFactorization's pivot loop - see CoinFactorization2.cpp).
+    // Treat exactly like any other "stopped on time" condition (same
+    // problemStatus_ convention used by hitMaximumIterations()) rather than
+    // falling through to the generic "basis singular" handling below, so
+    // callers recognise this cleanly as a time limit, not a numerical
+    // failure, and existing retry loops built for -99/-1 are bypassed.
+    problemStatus_ = 3;
+    return -1;
+  }
   if (status) {
     handler_->message(CLP_SIMPLEX_BADFACTOR, messages_)
       << status
@@ -2020,6 +2061,11 @@ int ClpSimplex::internalFactorize(int solveType)
     printf("Basis singular - pivot tolerance %g\n",
       factorization_->pivotTolerance());
 #endif
+    // better to re-initialize weights
+    if (dynamic_cast<ClpDualRowSteepest *>(dualRowPivot_))
+	dynamic_cast<ClpDualRowSteepest *>(dualRowPivot_)->setState(-1);
+    if (dynamic_cast<ClpPrimalColumnSteepest *>(primalColumnPivot_))
+	dynamic_cast<ClpPrimalColumnSteepest *>(primalColumnPivot_)->setState(-1);
     return -1;
   } else if (!solveType) {
     // Initial basis - return number of singularities
@@ -2422,7 +2468,7 @@ int ClpSimplex::housekeeping(double objectiveChange)
   int numberPivots = factorization_->pivots();
   int maximumPivots = factorization_->maximumPivots();
   int numberDense = factorization_->numberDense();
-  bool dontInvert = ((specialOptions_ & 16384) != 0 && numberIterations_ * 3 > 2 * maximumIterations());
+  bool dontInvert = ((specialOptions_ & 16384) != 0 && static_cast< CoinInt64 >(numberIterations_) * 3 > 2 * static_cast< CoinInt64 >(maximumIterations()));
   if (numberPivots == maximumPivots || maximumPivots < 2) {
     // If dense then increase
     if (maximumPivots > 100 && numberDense > 1.5 * maximumPivots
@@ -2483,6 +2529,7 @@ ClpSimplex::ClpSimplex(const ClpSimplex &rhs, int scalingMode)
   , rowPrimalSequence_(-2)
   , bestObjectiveValue_(rhs.bestObjectiveValue_)
   , moreSpecialOptions_(2)
+  , blasNumThreads_(-1)
   , baseIteration_(0)
   , vectorMode_(rhs.vectorMode_)
   , primalToleranceToGetOptimal_(-1.0)
@@ -2491,6 +2538,7 @@ ClpSimplex::ClpSimplex(const ClpSimplex &rhs, int scalingMode)
   , largestDualError_(0.0)
   , alphaAccuracy_(-1.0)
   , dualBound_(1.0e10)
+  , exactDualBound_(false)
   , alpha_(0.0)
   , theta_(0.0)
   , lowerIn_(0.0)
@@ -2592,6 +2640,7 @@ ClpSimplex::ClpSimplex(const ClpModel &rhs, int scalingMode)
   , rowPrimalSequence_(-2)
   , bestObjectiveValue_(-COIN_DBL_MAX)
   , moreSpecialOptions_(2)
+  , blasNumThreads_(-1)
   , baseIteration_(0)
   , vectorMode_(0)
   , primalToleranceToGetOptimal_(-1.0)
@@ -2600,6 +2649,7 @@ ClpSimplex::ClpSimplex(const ClpModel &rhs, int scalingMode)
   , largestDualError_(0.0)
   , alphaAccuracy_(-1.0)
   , dualBound_(1.0e10)
+  , exactDualBound_(false)
   , alpha_(0.0)
   , theta_(0.0)
   , lowerIn_(0.0)
@@ -2719,6 +2769,7 @@ void ClpSimplex::gutsOfCopy(const ClpSimplex &rhs)
   dontFactorizePivots_ = rhs.dontFactorizePivots_;
   int numberRows2 = numberRows_ + numberExtraRows_;
   moreSpecialOptions_ = rhs.moreSpecialOptions_;
+  blasNumThreads_ = rhs.blasNumThreads_;
   if ((whatsChanged_ & 1) != 0) {
     int numberTotal = numberColumns_ + numberRows2;
     if ((specialOptions_ & 65536) != 0 && maximumRows_ >= 0) {
@@ -2808,6 +2859,7 @@ void ClpSimplex::gutsOfCopy(const ClpSimplex &rhs)
   largestDualError_ = rhs.largestDualError_;
   alphaAccuracy_ = rhs.alphaAccuracy_;
   dualBound_ = rhs.dualBound_;
+  exactDualBound_ = rhs.exactDualBound_;
   alpha_ = rhs.alpha_;
   theta_ = rhs.theta_;
   lowerIn_ = rhs.lowerIn_;
@@ -3235,7 +3287,8 @@ void ClpSimplex::checkBothSolutions()
   double dualTolerance = dualTolerance_;
   double relaxedToleranceD = dualTolerance;
   // we can't really trust infeasibilities if there is dual error
-  error = std::min(1.0e-2, std::max(largestDualError_, 5.0 * dualTolerance_));
+  const double minimumDualError = (specialOptions_ & CLP_UNSCALED_CLEANUP) ? 0.0 : 5.0 * dualTolerance_;
+  error = std::min(1.0e-2, std::max(largestDualError_, minimumDualError));
   // allow tolerance at least slightly bigger than standard
   relaxedToleranceD = relaxedToleranceD + error;
   // allow bigger tolerance for possible improvement
@@ -4256,6 +4309,17 @@ bool ClpSimplex::createRim(int what, bool makeRowCopy, int startFinishOptions)
   }
   // we need to treat matrix as if each element by rowScaleIn and columnScaleout??
   // maybe we need to move scales to SimplexModel for factorization?
+  // Safety: if rows were added since the last factorization, pivotVariable_ is
+  // too small for the current row count.  Force reallocation so all subsequent
+  // loops (which run up to numberRows2) stay in bounds.
+  if (what == 63 && pivotVariable_ && factorization_
+    && factorization_->numberRows() < numberRows2) {
+    delete[] pivotVariable_;
+    pivotVariable_ = new int[numberRows2 + 1];
+    for (int i = 0; i < numberRows2 + 1; i++)
+      pivotVariable_[i] = -1;
+    keepPivots = false;
+  }
   if ((what == 63 && !pivotVariable_) || (newArrays && !keepPivots)) {
     delete[] pivotVariable_;
     pivotVariable_ = new int[numberRows2 + 1];
@@ -4941,8 +5005,17 @@ void ClpSimplex::deleteRim(int getRidOfFactorizationData)
 }
 void ClpSimplex::setDualBound(double value)
 {
-  if (value > 0.0)
+  if (value > 0.0) {
     dualBound_ = value;
+    exactDualBound_ = false;
+  }
+}
+void ClpSimplex::setExactDualBound(double value)
+{
+  if (value > 0.0) {
+    dualBound_ = value;
+    exactDualBound_ = true;
+  }
 }
 void ClpSimplex::setInfeasibilityCost(double value)
 {
@@ -5120,7 +5193,7 @@ int ClpSimplex::tightenPrimalBounds(double factor, int doTight, bool tightIntege
   // If wanted compute a reasonable dualBound_
   if (factor == COIN_DBL_MAX) {
     factor = 0.0;
-    if (dualBound_ == 1.0e10) {
+    if (dualBoundIsDefault()) {
       // get largest scaled away from bound
       double largest = 1.0e-12;
       double largestScaled = 1.0e-12;
@@ -5839,6 +5912,32 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
         returnCode = static_cast< ClpSimplexPrimal * >(this)->primal(1, startFinishOptions);
       }
     }
+    if (problemStatus_ == 10 && !numberPrimalInfeasibilities_
+      && sumDualInfeasibilities_ == -123456789.0 && numberIterations_ < saveMax) {
+      // Primal clean up gave up (e.g. looping on a highly degenerate
+      // problem) while still dual infeasible.  Treating this as optimal
+      // (status 10 with no primal infeasibilities -> 0 below) returns a
+      // solution with large dual infeasibilities, so try again with a
+      // perturbation to break the degeneracy.  problemStatus_ is left at
+      // 10 so startup() keeps numberIterations_.
+      intParam_[ClpMaxNumIteration] = std::min(numberIterations_ + 1000 + 2 * numberRows_ + numberColumns_, saveMax);
+      perturbation_ = savePerturbation < 100 ? savePerturbation : 50;
+      baseIteration_ = numberIterations_;
+      // Say second call
+      moreSpecialOptions_ |= 256;
+      returnCode = static_cast< ClpSimplexPrimal * >(this)->primal(1, startFinishOptions);
+      if (problemStatus_ == 0 || problemStatus_ == 10) {
+        // Perturbation moved bounds - finish against the true bounds.
+        problemStatus_ = 10;
+        perturbation_ = 100;
+        intParam_[ClpMaxNumIteration] = std::min(numberIterations_ + 1000 + 2 * numberRows_ + numberColumns_, saveMax);
+        baseIteration_ = numberIterations_;
+        returnCode = static_cast< ClpSimplexPrimal * >(this)->primal(1, startFinishOptions);
+      }
+      // Say not second call
+      moreSpecialOptions_ &= ~256;
+      baseIteration_ = 0;
+    }
     if (problemStatus_ == 3 && numberIterations_ < saveMax) {
 #ifdef COIN_DEVELOP
       if (handler_->logLevel() > 0)
@@ -5916,7 +6015,14 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
 	  handler_->message(CLP_GENERAL_WARNING, messages_)
 	    << temp
 	    << CoinMessageEol;
-	  primal();
+	  // Must preserve the caller's startFinishOptions (e.g. "keep work
+	  // areas") here - calling primal() with defaults (0) silently
+	  // deletes the rim (cost_/upper_/lower_/solution_/status_ arrays)
+	  // even when the caller asked to keep them, corrupting hot-start
+	  // callers (e.g. OsiClpSolverInterface::solveFromHotStart's
+	  // smallModel_ path) that read those arrays right after this call
+	  // returns, causing a null-pointer crash.
+	  primal(0, startFinishOptions);
 	}
       }
     }
@@ -6026,7 +6132,9 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
         secondaryStatus_ = 4;
     }
     // May be perturbed
-    if (startFinishOptions==7&&(perturbation_ == 101 || numberChanged_)) {
+    // cost_ can be NULL if problem was trivially solved (empty matrix) without
+    // going through createRim, in which case there is nothing to un-perturb.
+    if (startFinishOptions==7 && cost_ && (perturbation_ == 101 || numberChanged_)) {
       numberChanged_ = 0; // Number of variables with changed costs
       perturbation_ = 102; // stop any perturbations
       //double changeCost;
@@ -6053,6 +6161,63 @@ int ClpSimplex::dualDebug(int ifValuesPass, int startFinishOptions)
   }
   // clear serious error flags
   moreSpecialOptions_ &= ~(1073741824|536870912);
+#if 0
+  if (!problemStatus_&&(specialOptions_&0x01000000)!=0) {
+    // think hard
+    // may need to know about depth - if fathoming - success rate
+    // see if any integer variables are infeasible with no iterations
+    if (maximumIterations()==8121943&&integerType_) {
+      int * which = new int [3*numberRows_];
+      double * valueIncrease = new double[2*numberRows_];
+      int numberCheck = 0;
+      for (int i=0;i<numberRows_;i++) {
+	int iSeq = pivotVariable_[i];
+	// for now just 1 gap
+	if (iSeq<numberColumns_&&integerType_[iSeq] && columnUpper_[iSeq]==columnLower_[iSeq]+1.0) {
+	  double value = columnActivity_[iSeq];
+	  if (fabs(value-floor(value+0.5))>primalTolerance_) {
+	    which[numberCheck++] = iSeq;
+	  }
+	}
+      }
+      int *sequenceIncrease = which+numberCheck;
+      int *sequenceDecrease = sequenceIncrease+numberCheck;
+      double *valueDecrease = valueIncrease+numberCheck;
+      primalRanging(numberCheck,which,valueIncrease,sequenceIncrease,
+		    valueDecrease,sequenceDecrease);
+      double limit = 0.0;
+      getDblParam(ClpDualObjectiveLimit, limit);
+      double gap = limit-objectiveValue()+1.0e-3;
+      gap = std::min(gap,1.0e30);
+      int nFixed = 0;
+      for (int i=0;i<numberCheck;i++) {
+	int fix = 0;
+	if (valueIncrease[i]>gap)
+	  fix = 1;
+	if (valueDecrease[i]>gap)
+	  fix |= 2;
+	if (fix) {
+	  printf("fix %d for %d\n",fix,which[i]);
+	  nFixed++;
+	  int iSeq = which[i];
+	  // fix here - does that stay fixed
+	  if (fix==1) {
+	    columnUpper_[iSeq] = columnUpper_[iSeq]-1.0;
+	  } else if (fix==2) {
+	    columnLower_[iSeq] = columnLower_[iSeq]+1.0;
+	  } else {
+	    printf("problem infeasible?????\n");
+	    nFixed = 8121943;
+	    break;
+	  }
+	}
+      }
+      setMaximumIterations(8121943-nFixed);
+      delete [] which;
+      delete [] valueIncrease;
+    }
+  }
+#endif
   return returnCode;
 }
 // primal
@@ -6291,6 +6456,15 @@ int ClpSimplex::primal(int ifValuesPass, int startFinishOptions)
     } else {
       returnCode = static_cast< ClpSimplexPrimal * >(this)->primal(0, startFinishOptions);
     }
+    if (problemStatus_ == 10 && !numberPrimalInfeasibilities_
+      && (numberDualInfeasibilities_ || sumDualInfeasibilities_ == -123456789.0)
+      && (matrix_->generalExpanded(this, 4, dummy) & 1) != 0) {
+      // Dual clean up can restore the original costs and request primal
+      // again.  Primal feasibility alone does not imply optimality.
+      perturbation_ = 100;
+      baseIteration_ = numberIterations_;
+      returnCode = static_cast< ClpSimplexPrimal * >(this)->primal(1, startFinishOptions);
+    }
     // Say not second call
     moreSpecialOptions_ &= ~256;
     baseIteration_ = 0;
@@ -6298,9 +6472,14 @@ int ClpSimplex::primal(int ifValuesPass, int startFinishOptions)
     perturbation_ = savePerturbation;
     if (problemStatus_ == 10) {
       if (!numberPrimalInfeasibilities_) {
-        problemStatus_ = 0;
-        numberDualInfeasibilities_ = 0;
+        problemStatus_ = (!numberDualInfeasibilities_ && sumDualInfeasibilities_ != -123456789.0) ? 0 : 4;
       } else {
+	// if in idiot - return
+	if ((specialOptions_&0x800000)!=0) {
+	  specialOptions_ &= ~0x800000;
+	  problemStatus_ = -1;
+	  return 0;
+	}
 	// we really have problems
 	if ((moreSpecialOptions_&1073741824)!=0) {
 	  problemStatus_ = 4;
@@ -6314,7 +6493,11 @@ int ClpSimplex::primal(int ifValuesPass, int startFinishOptions)
 	  handler_->message(CLP_GENERAL_WARNING, messages_)
 	    << temp
 	    << CoinMessageEol;
-	  dual();
+	  // See the analogous fix in ClpSimplex::dual()'s "try once more"
+	  // fallback above: must preserve startFinishOptions here too, or
+	  // this call silently deletes the rim even when the caller asked
+	  // to keep it, crashing hot-start callers that read it afterwards.
+	  dual(0, startFinishOptions);
 	}
       }
     }
@@ -7030,6 +7213,7 @@ void ClpSimplex::borrowModel(ClpSimplex &otherModel)
   ClpModel::borrowModel(otherModel);
   createStatus();
   dualBound_ = otherModel.dualBound_;
+  exactDualBound_ = otherModel.exactDualBound_;
   dualTolerance_ = otherModel.dualTolerance_;
   primalTolerance_ = otherModel.primalTolerance_;
   delete dualRowPivot_;
@@ -9090,7 +9274,17 @@ int ClpSimplex::pivot()
   bool updateSolution = true;
   while (roundAgain) {
     roundAgain = false;
-    unpackPacked(rowArray_[1],sequenceIn_);
+    /* The entering column has to be unpacked in whichever form
+       updateColumnFT expects, and read back in the SAME form -- see
+       pivotResultPart2, which is the other place that does this sequence.
+       Getting only half of that right leaves alpha_ read out of a slot that
+       holds a different entry's value, or none, so the pivot is rejected as
+       singular (or, worse, taken with the wrong alpha). */
+#ifndef COIN_FAC_NEW
+    unpackPacked(rowArray_[1], sequenceIn_);
+#else
+    unpack(rowArray_[1], sequenceIn_);
+#endif
     factorization_->updateColumnFT(rowArray_[2], rowArray_[1]);
     alpha_ = 0.0;
     int i;
@@ -9103,7 +9297,11 @@ int ClpSimplex::pivot()
       int ii = index[i];
       if (pivotVariable_[ii] == sequenceOut_) {
         pivotRow_ = ii;
+#ifndef COIN_FAC_NEW
+        alpha_ = element[i];
+#else
         alpha_ = element[pivotRow_];
+#endif
         break;
       }
     }
@@ -9134,7 +9332,13 @@ int ClpSimplex::pivot()
       int ii = index[i];
       // get column
       int ij = pivotVariable_[ii];
+      /* Same packing question as the alpha_ read above. saveSolution is our own
+         dense scratch and stays indexed by row either way. */
+#ifndef COIN_FAC_NEW
+      double value = element[i];
+#else
       double value = element[ii];
+#endif
       saveSolution[ii] = solution_[ij];
       solution_[ij] -= movement * value;
     }
@@ -9337,8 +9541,26 @@ int ClpSimplex::factorizationFrequency() const
 }
 void ClpSimplex::setFactorizationFrequency(int value)
 {
-  if (factorization_)
+  if (factorization_) {
     factorization_->maximumPivots(value);
+    factorization_->setExactMaximumPivots(false);
+  }
+}
+void ClpSimplex::setExactFactorizationFrequency(int value)
+{
+  if (factorization_) {
+    factorization_->maximumPivots(value);
+    factorization_->setExactMaximumPivots(true);
+  }
+}
+bool ClpSimplex::exactFactorizationFrequency() const
+{
+  return factorization_ && factorization_->exactMaximumPivots();
+}
+bool ClpSimplex::factorizationFrequencyIsDefault() const
+{
+  return factorization_ && factorization_->maximumPivots() == 200
+    && !factorization_->exactMaximumPivots();
 }
 // Common bits of coding for dual and primal
 int ClpSimplex::startup(int ifValuesPass, int startFinishOptions)
@@ -11130,6 +11352,11 @@ int ClpSimplex::cleanup(int cleanupScaling)
       // say matrix changed
       whatsChanged_ |= 1;
       scaling(0);
+      // Cleanup must not accept the same tolerance-only relaxation that
+      // caused the unscaled dual infeasibility in the first place.
+      const unsigned int saveCleanupOption = specialOptions_ & CLP_UNSCALED_CLEANUP;
+      if (dual)
+        specialOptions_ |= CLP_UNSCALED_CLEANUP;
       if (cleanupScaling < 10) {
         // dual
         returnCode = this->dual();
@@ -11137,6 +11364,7 @@ int ClpSimplex::cleanup(int cleanupScaling)
         // primal
         returnCode = this->primal();
       }
+      specialOptions_ = (specialOptions_ & ~CLP_UNSCALED_CLEANUP) | saveCleanupOption;
 #ifdef COUNT_CLEANUPS
       n2++;
       n3 += numberIterations_;
@@ -11314,7 +11542,7 @@ ClpSimplex::infeasibilityRay(bool fullRay) const
 // If user left factorization frequency then compute
 void ClpSimplex::defaultFactorizationFrequency()
 {
-  if (factorizationFrequency() == 200) {
+  if (factorizationFrequencyIsDefault()) {
     // User did not touch preset
     const int cutoff1 = 10000;
     const int base = 75;
@@ -11563,7 +11791,14 @@ int ClpSimplex::fathom(void *stuff)
     int *whichColumn = new int[2 * numberColumns_];
     int nBound;
     bool tightenBounds = ((specialOptions_ & 64) == 0) ? false : true;
-    numberRows_=-numberRows_;//!! flag to say do more work (if test in crunch)
+    // NOTE: do NOT negate numberRows_ here to request the "redundant row"
+    // removal mode (takeOutSome) in crunch(). That mode drops rows deemed
+    // redundant using the CURRENT (root) node's bounds, but this crunched
+    // model is then reused across many descendant mini-BAB nodes with much
+    // tighter branching bounds; a row redundant at the root can become
+    // essential deeper in the tree, and having already been dropped, is
+    // silently missing for the rest of the subtree - corrupting the node's
+    // feasible region and allowing wrong (too-optimistic) objective values.
     ClpSimplex *small = static_cast< ClpSimplexOther * >(this)->crunch(rhs, whichRow, whichColumn,
       nBound, false, tightenBounds);
     if (small) {
@@ -12030,7 +12265,20 @@ int ClpSimplex::fathom(void *stuff)
         break;
       }
     }
-    if (problemStatus_ == 1 || (problemStatus_ == 0 && objectiveValue() * optimizationDirection_ > bestObjective)) {
+    bool isCutoff = (problemStatus_ == 0 && objectiveValue() * optimizationDirection_ > bestObjective);
+    if (problemStatus_ || isCutoff) {
+      if (problemStatus_ != 1 && !isCutoff) {
+	//writeMps("/tmp/bad.mps",0,2,1);
+	static int yyyyyy=0;
+	if (!yyyyyy) {
+	  int saveLogLevel = handler_->logLevel();
+	  handler_->setLogLevel(1);
+	  handler_->message(CLP_GENERAL_WARNING,messages_) << "Cbc3009W Possible accuracy problems - node assumed infeasible"
+	    << CoinMessageEol;
+	  handler_->setLogLevel(saveLogLevel);
+	  yyyyyy=1;
+	}
+      }
       backtrack = true;
       if (printing)
         printf("infeasible at depth %d\n", depth);
@@ -12052,8 +12300,6 @@ int ClpSimplex::fathom(void *stuff)
 	change = std::max(change,std::max(1.0e0,fabs(nodes[depth-1]->objectiveValue()*0.1)));
         info->update(way, sequence, change, false);
       }
-    } else if (problemStatus_ != 0) {
-      abort();
     } else {
       // Create node
       ClpNode *node = NULL;
@@ -12291,8 +12537,11 @@ int ClpSimplex::fathomMany(void *stuff)
     double *rhs = dual_;
     whichRow = new int[3 * numberRows_];
     whichColumn = new int[2 * numberColumns_];
-    numberRows_=-numberRows_;//!! flag to say do more work (if test in crunch)
     bool tightenBounds = ((specialOptions_ & 64) == 0) ? false : true;
+    // NOTE: see the matching comment in fathom() above - do NOT negate
+    // numberRows_ here (would request crunch()'s root-bound-based
+    // "redundant row" removal, which is unsound when the crunched model is
+    // reused across a whole mini-BAB subtree with tighter branching bounds).
     small = static_cast< ClpSimplexOther * >(this)->crunch(rhs, whichRow, whichColumn,
       nBound, false, tightenBounds);
     if (small&&small->numberRows_==0) {
@@ -12447,10 +12696,24 @@ int ClpSimplex::fathomMany(void *stuff)
     }
     status = problemStatus_;
   }
-  assert(problemStatus_ == 0 || problemStatus_ == 1); //(static_cast<ClpSimplexDual *> this)->dual(0,0);
-  if (problemStatus_ == 10) {
-    printf("Cleaning up with primal - need coding without createRim!\n");
-    abort();
+  if (problemStatus_ == 3) {
+    // fastDual2 hit an iteration/time limit on the root LP - cannot fathom this subtree
+    stopFastDual2(info);
+    info->nNodes_ = 0;
+    info->numberNodesExplored_ = 0;
+    info->numberIterations_ = numberIterations_;
+    return -1;
+  }
+  if (problemStatus_ != 0 && problemStatus_ != 1) {
+    // unexpected status (e.g. numerical difficulties, status 4, -1, etc.) - cannot fathom
+#ifdef COIN_DEVELOP
+    printf("bad status %d on initial fast dual in fathomMany\n", problemStatus_);
+#endif
+    stopFastDual2(info);
+    info->nNodes_ = 0;
+    info->numberNodesExplored_ = 0;
+    info->numberIterations_ = numberIterations_;
+    return -1;
   }
   int numberNodes = 0;
   int numberIterations = numberIterations_;
@@ -12579,7 +12842,20 @@ int ClpSimplex::fathomMany(void *stuff)
       fastDual2(info);
       forceFactorization_ = save;
     }
-    if (problemStatus_ == 1 || (problemStatus_ == 0 && objectiveValue() * optimizationDirection_ > bestObjective)) {
+    bool isCutoff = (problemStatus_ == 0 && objectiveValue() * optimizationDirection_ > bestObjective);
+    if (problemStatus_ || isCutoff) {
+      if (problemStatus_ != 1 && !isCutoff) {
+	//writeMps("/tmp/bad.mps",0,2,1);
+	static int yyyyyy=0;
+	if (!yyyyyy) {
+	  int saveLogLevel = handler_->logLevel();
+	  handler_->setLogLevel(1);
+	  handler_->message(CLP_GENERAL_WARNING,messages_) << "Cbc3009W Possible accuracy problems - node assumed infeasible"
+	    << CoinMessageEol;
+	  handler_->setLogLevel(saveLogLevel);
+	  yyyyyy=1;
+	}
+      }
       backtrack = true;
       if (printing)
         printf("infeasible at depth %d\n", depth);
@@ -12597,6 +12873,22 @@ int ClpSimplex::fathomMany(void *stuff)
           abort();
         }
       } else if (info->large_ && startOptimal && info->large_->numberColumns_ == numberColumns_Z) {
+        // NOTE: info->large_'s columnUpper_/columnLower_ are only remapped
+        // from this crunched node's bounds when a NEW INCUMBENT is found
+        // (see the analogous, correctly-remapping check a few lines below,
+        // in the feasible-node branch). Here (infeasible branch) they still
+        // hold whatever stale bounds were last written for a PREVIOUS,
+        // unrelated node - comparing against them is bogus and produces
+        // false "INF on optimal" positives. Remap this node's own crunched
+        // bounds into info->large_ first, exactly as the feasible branch
+        // does, before checking.
+        for (int i = 0; i < numberColumns_; i++) {
+          if (integerType_[i]) {
+            int iColumn = info->whichColumn_[i];
+            info->large_->columnUpper_[iColumn] = columnUpper_[i];
+            info->large_->columnLower_[iColumn] = columnLower_[i];
+          }
+        }
         bool onOptimal = true;
         for (int i = 0; i < info->large_->numberColumns_; i++) {
           if (info->large_->columnUpper_[i] < debuggerSolution_Z[i] || info->large_->columnLower_[i] > debuggerSolution_Z[i]) {
@@ -12607,6 +12899,19 @@ int ClpSimplex::fathomMany(void *stuff)
         if (onOptimal) {
           printf("INF on optimal (pre) fathom at depth %d\n", depth);
           writeMps("fathom_pre.mps");
+          // Cross-check: clone this node's exact LP (crunched model,
+          // current bounds) into a completely fresh ClpSimplex and solve it
+          // cold (allSlackBasis + dual()), bypassing fastDual2()'s
+          // warm-started incremental resolve entirely, to determine whether
+          // the infeasibility just reported by fastDual2() is genuine or a
+          // warm-start-state corruption artifact.
+          {
+            ClpSimplex fresh(*this);
+            fresh.allSlackBasis();
+            fresh.setSpecialOptions(0);
+            fresh.dual();
+            printf("cold-resolve status=%d obj=%g\n", fresh.status(), fresh.objectiveValue());
+          }
           abort();
         }
       }
@@ -12627,8 +12932,6 @@ int ClpSimplex::fathomMany(void *stuff)
           change = 10.0 * sumChanges / (1.0 + numberChanges);
         info->update(way, sequence, change, false);
       }
-    } else if (problemStatus_ != 0) {
-      abort();
     } else {
       // Create node
       ClpNode *node;
@@ -12700,6 +13003,12 @@ int ClpSimplex::fathomMany(void *stuff)
         }
       }
 #endif
+      // Track whether the solution was already saved into nodeInfo[goodNodes]
+      // (Path B). In that case we must NOT call gutsOfConstructor a second
+      // time after doubleCheck(), because doubleCheck() re-solves the LP and
+      // the updated column solution may have marginally fractional integer
+      // values, causing the assert below to fire.
+      bool savedToGoodNodesSlot = false;
       if (depth < info->nDepth_ && !stopAtOnce) {
         node = nodeInfo[useDepth];
         if (node) {
@@ -12718,6 +13027,7 @@ int ClpSimplex::fathomMany(void *stuff)
         if (!node->oddArraysExist())
           node->createArrays(this);
         node->gutsOfConstructor(this, info, 2, depth);
+        savedToGoodNodesSlot = true;
       }
       if (node->sequence() < 0) {
         // solution
@@ -12748,7 +13058,11 @@ int ClpSimplex::fathomMany(void *stuff)
             if (!node->oddArraysExist())
               node->createArrays(info->large_);
             node->gutsOfConstructor(info->large_, info, 2, depth);
-          } else {
+          } else if (!savedToGoodNodesSlot) {
+            // Path A: need to copy the integer solution into the goodNodes slot.
+            // Skip when savedToGoodNodesSlot (Path B): the node was already
+            // saved before doubleCheck(), and re-saving after doubleCheck()
+            // may produce sequence()>=0 due to the LP state having changed.
             if (!node->oddArraysExist())
               node->createArrays(this);
             node->gutsOfConstructor(this, info, 2, depth);
@@ -12831,10 +13145,12 @@ int ClpSimplex::fathomMany(void *stuff)
   // nNodes,info->nDepth_,useDepth,goodNodes);
 #ifdef CHECK_PATH
   if (startOptimal) {
-    assert(startOptimal == 2);
+    // NOTE: startOptimal==2 is only ever set when the known-optimal
+    // solution is found via the "at full depth" fathom paths above; a
+    // genuine improving solution matching the known optimum found via the
+    // normal (non-full-depth) solution branch is a perfectly valid, GOOD
+    // outcome and should not abort here - remove the overly strict assert.
     printf("got fathomed optimal at end %d\n", startOptimal);
-    if (startOptimal != 2)
-      abort();
   }
 #endif
   assert(depth == -1);
@@ -12894,9 +13210,9 @@ int ClpSimplex::startFastDual2(ClpNodeStuff *info)
   assert((info->solverOptions_ & 65536) == 0);
   info->solverOptions_ |= 65536;
   if ((specialOptions_ & 65536) == 0) {
-    factorization_->setPersistenceFlag(2);
+    factorization_->setPersistenceFlag(3);
   } else {
-    factorization_->setPersistenceFlag(2);
+    factorization_->setPersistenceFlag(3);
     startPermanentArrays();
   }
   //assert (!lower_);

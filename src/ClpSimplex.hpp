@@ -86,6 +86,9 @@ class AbcSimplex;
 #define LONG_REGION_2 1
 #define SHORT_REGION 1
 #endif
+#ifndef CLP_START_FINISH
+#define CLP_START_FINISH 0
+#endif
 /** This solves LPs using the simplex method
 
     It inherits from ClpModel and all its arrays are created at
@@ -397,6 +400,10 @@ public:
         3 - clean up using dual if primal or dual infeasibility
         11,12,13 - as 1,2,3 but use primal
 
+        When unscaled dual infeasibility is reported, cleanup omits the
+        tolerance-only dual relaxation used by ordinary solves, while still
+        allowing for measured factorization error.
+
         return code as dual/primal
      */
   int cleanup(int cleanupScaling);
@@ -676,15 +683,38 @@ public:
   /// Sparsity on or off
   bool sparseFactorization() const;
   void setSparseFactorization(bool value);
-  /// Factorization frequency
+  /** Factorization frequency. The preset 200 means "let Clp choose from the
+      problem size" (see defaultFactorizationFrequency()), so
+      setFactorizationFrequency(200) restores that guess.
+      setExactFactorizationFrequency() sets a value that is used as given,
+      200 included. */
   int factorizationFrequency() const;
   void setFactorizationFrequency(int value);
-  /// Dual bound
+  void setExactFactorizationFrequency(int value);
+  /// Whether the factorization frequency is the preset 200 that Clp may replace
+  bool factorizationFrequencyIsDefault() const;
+  /// Whether the factorization frequency was set with setExactFactorizationFrequency()
+  bool exactFactorizationFrequency() const;
+  /** Dual bound. The preset 1.0e10 may be replaced by a value derived from
+      the problem's bounds; setDualBound(1.0e10) restores that behaviour.
+      setExactDualBound() sets a value that is used as given, 1.0e10
+      included. Both ignore values <= 0. */
   inline double dualBound() const
   {
     return dualBound_;
   }
   void setDualBound(double value);
+  void setExactDualBound(double value);
+  /// Whether the dual bound is the preset 1.0e10 that Clp may replace
+  inline bool dualBoundIsDefault() const
+  {
+    return dualBound_ == 1.0e10 && !exactDualBound_;
+  }
+  /// Whether the dual bound was set with setExactDualBound()
+  inline bool exactDualBound() const
+  {
+    return exactDualBound_;
+  }
   /// Infeasibility cost
   inline double infeasibilityCost() const
   {
@@ -1490,6 +1520,17 @@ public:
   {
     vectorMode_ = value;
   }
+  /** Maximum number of BLAS threads to use during LP solves (e.g. OpenBLAS).
+      -1 (default) means no restriction.  Set to 1 to prevent thread
+      multiplication when CBC is already running parallel B&B. */
+  inline int blasNumThreads() const
+  {
+    return blasNumThreads_;
+  }
+  inline void setBLASNumThreads(int num)
+  {
+    blasNumThreads_ = num;
+  }
   //@}
   /**@name status methods */
   //@{
@@ -1786,6 +1827,9 @@ protected:
   double bestObjectiveValue_;
   /// More special options - see set for details
   int moreSpecialOptions_;
+  /** Maximum BLAS threads during LP solves; -1 = no restriction.
+      When >= 0, openblas_set_num_threads() is called before each resolve(). */
+  int blasNumThreads_;
   /// Iteration when we entered dual or primal
   int baseIteration_;
   /// Vector mode - try and use vector instructions
@@ -1802,6 +1846,8 @@ protected:
   double alphaAccuracy_;
   /// Dual bound
   double dualBound_;
+  /// See setExactDualBound()
+  bool exactDualBound_;
   /// Alpha (pivot element)
   double alpha_;
   /// Theta (pivot change)
@@ -2007,6 +2053,21 @@ protected:
 
   /// last time when status was updated
   double lastStatusUpdate_;
+
+public:
+  /// @name Presolve statistics (populated by initialSolve with ClpSolve)
+  //@{
+  /// Time spent in CLP presolve (seconds), or 0 if presolve was off.
+  double presolveTime() const { return presolveTime_; }
+  /// Number of rows after presolve (-1 if presolve was off).
+  int presolveRows() const { return presolveRows_; }
+  /// Number of columns after presolve (-1 if presolve was off).
+  int presolveCols() const { return presolveCols_; }
+  //@}
+protected:
+  double presolveTime_ = 0.0;
+  int presolveRows_ = -1;
+  int presolveCols_ = -1;
 };
 //#############################################################################
 /** A function that tests the methods in the ClpSimplex class. The
